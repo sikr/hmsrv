@@ -93,6 +93,15 @@ var tableRooms =
 var databaseTables = [{'name': 'values', 'sql': tableValues, 'data': null, 'clear': true}];
 
 //
+// Filesystem
+//
+var directories = {
+  data: __dirname + '/../data',
+  db  : __dirname + '/../db',
+  log : __dirname + '/../log'
+};
+
+//
 // Homematic data
 //
 var devices;
@@ -152,7 +161,7 @@ function loadRegaData(index, callback) {
       log.info('REGA: ' + regaData[index] + ' successfully read.');
 
       // save persistent data to disk for further processing
-      fs.writeFile('../data/persistence-' + regaData[index] + '.json', JSON.stringify(data));
+      fs.writeFile(directories.data + '/persistence-' + regaData[index] + '.json', JSON.stringify(data));
 
       index++;
       if (index < regaData.length) {
@@ -168,36 +177,44 @@ function loadRegaData(index, callback) {
 }
 
 function loadPersistentRegaData(index, callback) {
-  if (!fs.existsSync(__dirname + '/../data/persistence-' + regaData[index] + '.json')) {
-    log.error('File not found: ' + __dirname + '/../data/persistence-' + regaData[index] + '.json');
+  if (!fs.existsSync(directories.data + '/persistence-' + regaData[index] + '.json')) {
+    log.error('REGA: File not found: ' + directories.data + '/persistence-' + regaData[index] + '.json');
+    log.info('REGA: Persistent rega data not found, trying to fetch from CCU...');
+    loadRegaData(0, function() {
+    if (typeof callback === 'function') {
+      callback();
+    }
+    });
   }
-  fs.readFile(__dirname + '/../data/persistence-' + regaData[index] + '.json', function(err, data) {
-    if (!err) {
-      if (regaData[index] === 'channels') {
-        channels = JSON.parse(data);
-      }
-      else if (regaData[index] === 'datapoints') {
-        datapoints = JSON.parse(data);
-      }
-      else if (regaData[index] === 'devices') {
-        devices = JSON.parse(data);
-      }
-      else if (regaData[index] === 'rooms') {
-        rooms = JSON.parse(data);
-      }
-      log.info('REGA: ../data/persistence-' + regaData[index] + '.json successfully read.');
+  else {
+    fs.readFile(__dirname + '/../data/persistence-' + regaData[index] + '.json', function(err, data) {
+      if (!err) {
+        if (regaData[index] === 'channels') {
+          channels = JSON.parse(data);
+        }
+        else if (regaData[index] === 'datapoints') {
+          datapoints = JSON.parse(data);
+        }
+        else if (regaData[index] === 'devices') {
+          devices = JSON.parse(data);
+        }
+        else if (regaData[index] === 'rooms') {
+          rooms = JSON.parse(data);
+        }
+        log.info('REGA: ' + directories.data + '/persistence-' + regaData[index] + '.json successfully read.');
 
-      index++;
-      if (index < regaData.length) {
-        loadPersistentRegaData(index, callback);
-      }
-      else {
-        if (typeof callback === 'function') {
-          callback();
+        index++;
+        if (index < regaData.length) {
+          loadPersistentRegaData(index, callback);
+        }
+        else {
+          if (typeof callback === 'function') {
+            callback();
+          }
         }
       }
-    }
-  });
+    });
+  }
 }
 
 
@@ -303,6 +320,23 @@ function setupDatabase(callback) {
   }
 }
 
+/******************************************************************************
+ *
+ * Filesystem
+ *
+ */
+function setupFileSystem(callback) {
+  // verify that all directories exist
+  for (var i in directories) {
+    if (!fs.existsSync(directories[i])) {
+      fs.mkdirSync(directories[i]);
+    }
+  }
+  if (typeof callback === 'function') {
+    callback();
+  }
+}
+
 function logEvent(event) {
   if (isNaN(event[3])) {
     log.warn('RPC: non numeric value: ' + event[1] + ', ' + event[2] + ', ' + event[3]);
@@ -376,23 +410,27 @@ log.info('__dirname = ' + __dirname);
 
 var t = log.time();
 
-setupRega(function() {
-  setupRpc(function() {
-    loadPersistentRegaData(0, function() {
-    // loadRegaData(0, function() {
-      var dpCount = 0;
-      // build dpIndex for name <> id
-      for (var i in datapoints) {
-        dpIndex[unescape(datapoints[i].Name)] = i;
-        dpCount++;
-      }
-      for (i in dpIndex) {
-        log.verbose('dpIndex[' + i + '] = ' + dpIndex[i]);
-      }
-      log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
-      // setupDatabase(function() {
-        log.time(t, 'Startup finished after ');
-      // });
+
+
+setupFileSystem(function () {
+  setupRega(function() {
+    setupRpc(function() {
+      loadPersistentRegaData(0, function() {
+      // loadRegaData(0, function() {
+        var dpCount = 0;
+        // build dpIndex for name <> id
+        for (var i in datapoints) {
+          dpIndex[unescape(datapoints[i].Name)] = i;
+          dpCount++;
+        }
+        for (i in dpIndex) {
+          log.verbose('dpIndex[' + i + '] = ' + dpIndex[i]);
+        }
+        log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
+        // setupDatabase(function() {
+          log.time(t, 'Startup finished after ');
+        // });
+      });
     });
   });
 });

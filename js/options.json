@@ -1,18 +1,18 @@
-{
-  "ccuIp": "192.168.169.4",
-  "ccuPort": 2001,
-  "serverIp": "192.168.169.6",
-  "serverPort": 8082,
-  "log": {
-    "file": {
-      "name": "log/hmsrv.log",
-      "level": 2,
-      "maxLength": -1
-      },
-    "console": {
-      "maxLength": 139,
-      "level": 0,
-      "colored": true
+    {
+      "ccuIp": "192.168.169.4",
+      "ccuPort": 2001,
+      "serverIp": "192.168.169.6",
+      "serverPort": 8082,
+      "log": {
+        "file": {
+          "name": "log/hmsrv.log",
+          "level": 2,
+          "maxLength": -1
+          },
+        "console": {
+          "maxLength": 139,
+          "level": 2,
+          "colored": true
+        }
+      }
     }
-  }
-}

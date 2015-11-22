@@ -4,6 +4,7 @@ data/*
 db/*
 hmsrv.sublime*
 js/____*
+js/config.json
 log/*
 node_modules
 private*

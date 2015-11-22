@@ -1,7 +1,7 @@
     {
-      "ccuIp": "192.168.169.4",
+      "ccuIp": "0.0.0.0",
       "ccuPort": 2001,
-      "serverIp": "192.168.169.6",
+      "serverIp": "0.0.0.0",
       "serverPort": 8082,
       "log": {
         "file": {

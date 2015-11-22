@@ -1,0 +1,10 @@
+____*
+components
+data/*
+db/*
+hmsrv.sublime*
+js/____*
+log/*
+node_modules
+private*
+regascripts/output/*

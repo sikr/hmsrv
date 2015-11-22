@@ -1,0 +1,27 @@
+{
+  "name": "hmsrv",
+  "version": "0.0.1",
+  "description": "Homematic Server",
+  "main": "hmsrv.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "binrpc",
+    "ccu",
+    "ccu1"
+    "ccu2",
+    "homematic",
+    "rega",
+    "xmlrpc"
+  ],
+  "author": "SiKr",
+  "license": "MIT",
+  "dependencies": {
+    "binrpc": "^0.1.3",
+    "homematic-xmlrpc": "^1.0.1",
+    "request": "^2.65.0",
+    "sqlite3": "^3.1.1",
+    "xml2js": "^0.4.15"
+  }
+}

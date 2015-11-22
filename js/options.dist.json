@@ -1,18 +1,26 @@
-    {
-      "ccuIp": "0.0.0.0",
-      "ccuPort": 2001,
-      "serverIp": "0.0.0.0",
-      "serverPort": 8082,
-      "log": {
-        "file": {
-          "name": "log/hmsrv.log",
-          "level": 2,
-          "maxLength": -1
-          },
-        "console": {
-          "maxLength": 139,
-          "level": 2,
-          "colored": true
-        }
-      }
+{
+  "ccuIp": "0.0.0.0",
+  "ccuPort": 2001,
+  "serverIp": "0.0.0.0",
+  "serverPort": 8082,
+  "log": {
+    "file": {
+      "name": "log/hmsrv.log",
+      "level": 2,
+      "maxLength": -1
+      },
+    "console": {
+      "maxLength": 139,
+      "level": 2,
+      "colored": true
     }
+  },
+  "mail": {
+    "host": "smtp.foo.com",
+    "port": 587,
+    "user": "foo@foo.com",
+    "password": "bar",
+    "secure": true,
+    "recipient": "bar@bar.com"
+  }
+}

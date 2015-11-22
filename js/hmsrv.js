@@ -26,6 +26,7 @@ if (!fs.existsSync(__dirname + '/options.json')) {
 }
 
 var log      = require('./logger.js');
+var mail     = require('./mail.js');
 var utils    = require('./utils');
 var options  = require('./options.json');
 
@@ -407,9 +408,7 @@ function shutdown(params) {
  * MAIN
  *
  */
-
 var startTime = log.time();
-
 
 setupFileSystem(function () {
   setupRega(function() {
@@ -444,6 +443,7 @@ setupFileSystem(function () {
   });
 });
 
-
+// mail.send('Huhuuu', 'test message', function() {
+// });
 
 })();

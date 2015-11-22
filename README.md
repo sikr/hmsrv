@@ -1,14 +1,17 @@
 # hmsrv
-Receive and send data from Homematic CCU, store data in sqlite3 db and make data accessible via XHR/Websocket for web applications
+Receive and send data from Homematic CCU, store data in an sqlite3 db and make data accessible via XHR/Websocket for web applications
 
 hmsrv uses [hobbyquaker's](https://github.com/hobbyquaker) Homematic rega implementation and scripts from [ccu.io](https://github.com/hobbyquaker/ccu.io) as well as [binrpc](https://github.com/hobbyquaker/binrpc)
 
 ## Installation:
 
-    git clone https://github.com/sikr/hmsrv.git
-    npm install
+```
+git clone https://github.com/sikr/hmsrv.git
+cd hmsrv
+npm install
+```
 
-Set IP adress of ccu and raspberry pi in file js/opitons.json
+Set IP adress of ccu and raspberry pi in file js/options.json.
 
 To start on console:
 

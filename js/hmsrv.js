@@ -1,8 +1,8 @@
 /*
  * hmsrv.js
  *
- * Receive and send data from Homematic CCU and make them accessible via
- * XHR/Websocket for web application
+ * Receive and send data from Homematic CCU, store data in sqlite3 db and
+ * make data accessible via XHR/Websocket for web applications.
  * 
  * 
  *   
@@ -112,17 +112,17 @@ function setupRega(callback) {
   regaHss = new Rega({
     ccuIp: options.ccuIp,
     ready: function() {
-      log.info('CCU rega connected successfully');
+      log.info('CCU rega is ready.');
       regaUp = true;
       if (typeof callback === "function") {
         callback();
       }
     },
     down: function() {
-      log.error('CCU rega is down');
+      log.error('CCU rega is down.');
     },
     unreachable: function() {
-      log.error('CCU rega is unreachable');
+      log.error('CCU rega is unreachable.');
     }
   });
 }
@@ -168,7 +168,10 @@ function loadRegaData(index, callback) {
 }
 
 function loadPersistentRegaData(index, callback) {
-  fs.readFile('../data/persistence-' + regaData[index] + '.json', function(err, data) {
+  if (!fs.existsSync(__dirname + '/../data/persistence-' + regaData[index] + '.json')) {
+    log.error('File not found: ' + __dirname + '/../data/persistence-' + regaData[index] + '.json');
+  }
+  fs.readFile(__dirname + '/../data/persistence-' + regaData[index] + '.json', function(err, data) {
     if (!err) {
       if (regaData[index] === 'channels') {
         channels = JSON.parse(data);
@@ -228,7 +231,7 @@ function setupRpc(callback) {
     }
   });
   rpcServer.on('NotFound', function (err, params, callback) {
-    log.warn('RPC: "NotFound" occured on method ' + err);
+    log.warn('RPC "NotFound" occured on method ' + err);
     if (typeof callback === 'function') {
       callback();
     }
@@ -255,11 +258,11 @@ function setupRpc(callback) {
         ],
         function (err, res) {
           if (err) {
-            log.info('error connecting to ccu xml rpc server.');
+            log.error('RPC connecting to ccu rpc serverfailed.');
           }
           else {
             rpcConnectionUp = true;
-            log.info('RPC: connection to ccu successfully established.');
+            log.info('RPC connection to ccu successfully established.');
           }
           if (typeof callback === 'function') {
             callback();
@@ -269,7 +272,7 @@ function setupRpc(callback) {
     });
     rpcClient.on('close', function() {
       // to do
-      log.info('RPC: connection closed!!!');
+      log.info('RPC connection closed!!!');
     });
   }, 1000);
 }
@@ -369,6 +372,8 @@ function shutdown(params) {
  *
  */
 
+log.info('__dirname = ' + __dirname);
+
 var t = log.time();
 
 setupRega(function() {
@@ -381,10 +386,13 @@ setupRega(function() {
         dpIndex[unescape(datapoints[i].Name)] = i;
         dpCount++;
       }
+      for (i in dpIndex) {
+        log.verbose('dpIndex[' + i + '] = ' + dpIndex[i]);
+      }
       log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
-      setupDatabase(function() {
+      // setupDatabase(function() {
         log.time(t, 'Startup finished after ');
-      });
+      // });
     });
   });
 });

@@ -8,3 +8,4 @@ log/*
 node_modules
 private*
 regascripts/output/*
+*.pid

@@ -20,7 +20,7 @@ var options = require('./options.json');
 
 var logger = {
 
-  logfile: options.log.file.name,
+  logfile: __dirname + '/../' + options.log.file.name,
   level: 0,
 
   // time measurement
@@ -42,6 +42,9 @@ var logger = {
   verbose: function(message) {
     this.log(1, message);
   },
+  info: function(message) {
+    this.log(2, message);
+  },
   time: function(id, message) {
     if (id === undefined) {
       this.id++;
@@ -52,16 +55,13 @@ var logger = {
       if (this.startTime[id] !== undefined) {
         var t = new Date();
         var diff = t - this.startTime[id];
-        this.log(2, message + ' ' + (diff/1000).toString() + ' s');
+        this.log(3, message + ' ' + (diff/1000).toString() + ' s');
         this.startTime[id] = undefined;
       }
       else {
         this.log(5, 'Invalid time id: ' + id);
       }
     }
-  },
-  info: function(message) {
-    this.log(3, message);
   },
   warn: function(message) {
     this.log(4, message);

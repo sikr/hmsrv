@@ -3,7 +3,7 @@ Receive and send data from Homematic CCU, store data in sqlite3 db and make data
 
 Installation:
 
-    git clone ...
+    git clone https://github.com/sikr/hmsrv.git
     npm install
 
 Set IP adress of ccu and raspberry pi in file js/opitons.json

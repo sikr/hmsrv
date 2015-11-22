@@ -20,6 +20,11 @@
 
 var fs       = require ('fs');
 
+if (!fs.existsSync(__dirname + '/options.json')) {
+  console.error('File js/options.json is missing - copy js/options.dist.json to js/options.json and adapt to your ip adresses');
+  process.exit(1);
+}
+
 var log      = require('./logger.js');
 var utils    = require('./utils');
 var options  = require('./options.json');
@@ -422,7 +427,7 @@ setupFileSystem(function () {
         }
         log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
         // setupDatabase(function() {
-          log.time(startTime, 'HMSRV: Startup finished after ');
+        log.time(startTime, 'HMSRV: Startup finished after ');
 
         // prevent node app from running as root permanently
         var uid = parseInt(process.env.SUDO_UID);

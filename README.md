@@ -10,8 +10,11 @@ git clone https://github.com/sikr/hmsrv.git
 cd hmsrv
 npm install
 ```
+## Configuration:
 
 Copy file js/options.dist.json to js/options.json and set the ip adress for the ccu and hmsrv (the system you're running hmsrv on)
+
+## Start
 
 To start on console:
 

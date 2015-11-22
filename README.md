@@ -11,7 +11,7 @@ cd hmsrv
 npm install
 ```
 
-Set IP adress of ccu and raspberry pi in file js/options.json.
+Copy file js/options.dist.json to js/options.json and set the ip adress for the ccu and hmsrv (the system you're running hmsrv on)
 
 To start on console:
 

@@ -1,8 +1,12 @@
 {
-  "ccuIp": "0.0.0.0",
-  "ccuPort": 2001,
-  "serverIp": "0.0.0.0",
-  "serverPort": 8082,
+  "hmsrv": {
+    "ip": "0.0.0.0.",
+    "rpcPort": 8082
+  },
+  "ccu": {
+    "ip": "0.0.0.0",
+    "rpcPort": 2001
+  },
   "log": {
     "file": {
       "name": "log/hmsrv.log",

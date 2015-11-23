@@ -28,7 +28,7 @@ var mail = {
 
     this.transport.sendMail(mailOptions, function(error, info) {
         if (error) {
-          log.error(error);
+          log.error('MAIL: ' + error);
         }
         else {
           log.info('MAIL: sent message to ' + options.mail.recipient + ': ' + info.response);

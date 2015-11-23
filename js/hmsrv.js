@@ -125,7 +125,7 @@ var dpValues = [];  // latest datapoint values to identify unchanged
  */
 function setupRega(callback) {
   regaHss = new Rega({
-    ccuIp: options.ccuIp,
+    ccuIp: options.ccu.ip,
     ready: function() {
       log.info('CCU: rega is ready.');
       regaUp = true;
@@ -233,7 +233,7 @@ function setupRpc(callback) {
   //
   // setup server
   //
-  rpcServer = rpc.createServer({host: options.serverIp, port: options.serverPort.toString()});
+  rpcServer = rpc.createServer({host: options.hmsrv.ip, port: options.hmsrv.rpcPort.toString()});
 
   rpcServer.on('system.listMethods', function (err, params, callback) {
       callback(['system.listMethods', 'system.multicall']);
@@ -262,7 +262,7 @@ function setupRpc(callback) {
   // setup client (delayed to ensure server is started)
   //
   setTimeout(function() {
-    rpcClient = rpc.createClient({host: options.ccuIp, port: options.ccuPort.toString()});
+    rpcClient = rpc.createClient({host: options.ccu.ip, port: options.ccu.rpcPort.toString()});
 
     rpcClient.on('error', function() {
       // to do
@@ -272,8 +272,8 @@ function setupRpc(callback) {
     });
     rpcClient.on('connect', function() {
       rpcClient.methodCall('init', [
-          // 'http://' + options.serverIp + ':' + options.serverPort.toString(),
-          'xmlrpc_bin://' + options.serverIp + ':' + options.serverPort.toString(),
+          // 'http://' + options.hmsrv.ip + ':' + options.serverPort.toString(),
+          'xmlrpc_bin://' + options.hmsrv.ip + ':' + options.hmsrv.rpcPort.toString(),
           '123456'
         ],
         function (err, res) {
@@ -382,7 +382,7 @@ function shutdown(params) {
   if (rpcConnectionUp) {
     log.info('RPC: closing xml rpc connection...');
     rpcClient.methodCall('init', [
-        'http://' + options.serverIp + ':' + options.serverPort.toString(),
+        'http://' + options.hmsrv.ip + ':' + options.hmsrv.rpcPort.toString(),
         ''
       ],
       function (err, res) {
@@ -428,13 +428,13 @@ setupFileSystem(function () {
         // setupDatabase(function() {
         log.time(startTime, 'HMSRV: Startup finished after ');
 
-        // prevent node app from running as root permanently
-        var uid = parseInt(process.env.SUDO_UID);
-        // Set our server's uid to that user
-        if (uid){
-          process.setuid(uid);
-        }
-        log.info('Server\'s UID is now ' + process.getuid());
+        // // prevent node app from running as root permanently
+        // var uid = parseInt(process.env.SUDO_UID);
+        // // Set our server's uid to that user
+        // if (uid){
+        //   process.setuid(uid);
+        // }
+        // log.info('Server\'s UID is now ' + process.getuid());
 
 
         // });

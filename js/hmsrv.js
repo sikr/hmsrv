@@ -446,7 +446,7 @@ function logEvent(event) {
     var name = event[2];
     var value = parseInt(event[3], 10);
     var status;
-    var log = true;
+    var store = true;
 
     if (isNaN(value)) {
       if (typeof event[3] === 'boolean') {
@@ -454,11 +454,11 @@ function logEvent(event) {
         log.info('RPC: converted non numeric (boolean) to integer: ' + address + ', ' + name + ', ' + event[3] + ' -> ' + value);
       }
       else {
-        log = false;
+        store = false;
         log.warn('RPC: non numeric value: ' + address + ', ' + name + ', ' + event[3]);
       }
     }
-    if (log) {
+    if (store) {
       id = dpIndex['BidCos-RF.' + address + '.' + name];
 
       if (id !== undefined) {

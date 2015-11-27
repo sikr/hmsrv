@@ -113,6 +113,7 @@ var logFile = fs.createWriteStream(logger.logfile, {
 
 process.on("uncaughtException", function(err) {
   try {
+    console.log(JSON.stringify(err.stack));
     logFile.write(err.stack);
   } catch (e) {
     // ...?

@@ -41,20 +41,38 @@ var regaUp   = false;
 //
 // RPC
 //
-// var rpc      = require('homematic-xmlrpc');
-var rpc     = require('binrpc');
+// var rpcType = 'plain';
+var rpcType = 'bin';
+var rpc     = (rpcType === 'bin') ? require('binrpc') : require('homematic-xmlrpc');
 var rpcClient;
 var rpcServer;
-var rpcConnectionUp = false;
+var rpcEventReceiverConnected = false;
+var rpcReconectTimeout = 20000;
+var rpcReconectCount = 0;
+
+//
+// Filesystem
+//
+var directories = {
+  data: __dirname + '/../data',
+  db  : __dirname + '/../db',
+  log : __dirname + '/../log'
+};
 
 //
 // DB
 //
-var db = require('./db');
-var databaseDir  = "../db/";
-var databaseFile = "hmsrv.sqlite";
+var db       = require('./db');
+var dbDir    = directories.db;
+var dbFile   = "hmsrv.sqlite";
+var dbOpened = false;
 
 var tableValues =
+  'timestamp     INTEGER, ' +
+  'id            INTEGER, ' +
+  'value         REAL     ';
+
+var tableValuesFull =
   'timestamp     INTEGER, ' +
   'id            INTEGER, ' +
   'value         REAL     ';
@@ -96,16 +114,12 @@ var tableRooms =
   'Name          TEXT,    ' + 
   'TypeName      TEXT,    ';
 
-var databaseTables = [{'name': 'values', 'sql': tableValues, 'data': null, 'clear': true}];
-
-//
-// Filesystem
-//
-var directories = {
-  data: __dirname + '/../data',
-  db  : __dirname + '/../db',
-  log : __dirname + '/../log'
-};
+var dbTables = [{'name': 'vals', 'sql': tableValues, 'data': null, 'clear': true},
+                {'name': 'valsFull', 'sql': tableValuesFull, 'data': null, 'clear': true}];
+var dbCacheVals = [];
+var dbCacheValsFull = [];
+var dbFlushId = 0;
+var dbFlushInterval = 60000;
 
 //
 // Homematic data
@@ -116,6 +130,8 @@ var datapoints;
 var rooms;
 var dpIndex  = {};  // index of homematic adress > homeatic id
 var dpValues = [];  // latest datapoint values to identify unchanged
+
+var stopping = false;
 
 
 /******************************************************************************
@@ -187,9 +203,9 @@ function loadPersistentRegaData(index, callback) {
     log.warn('REGA: File not found: ' + directories.data + '/persistence-' + regaData[index] + '.json');
     log.info('REGA: Persistent rega data not found, trying to fetch from CCU...');
     loadRegaData(0, function() {
-    if (typeof callback === 'function') {
-      callback();
-    }
+      if (typeof callback === 'function') {
+        callback();
+      }
     });
   }
   else {
@@ -230,9 +246,14 @@ function loadPersistentRegaData(index, callback) {
  *
  */
 function setupRpc(callback) {
-  //
-  // setup server
-  //
+  setupRpcServer();
+  // setup client delayed to ensure server is up
+  setTimeout(function() {
+    setupRpcClient(callback);
+  }, 1000);
+}
+
+function setupRpcServer() {
   rpcServer = rpc.createServer({host: options.hmsrv.ip, port: options.hmsrv.rpcPort.toString()});
 
   rpcServer.on('system.listMethods', function (err, params, callback) {
@@ -256,45 +277,95 @@ function setupRpc(callback) {
       callback();
     }
   });
+}
 
+function setupRpcClient(callback) {
+  rpcClient = rpc.createClient({host: options.ccu.ip, port: options.ccu.rpcPort.toString()});
 
-  //
-  // setup client (delayed to ensure server is started)
-  //
-  setTimeout(function() {
-    rpcClient = rpc.createClient({host: options.ccu.ip, port: options.ccu.rpcPort.toString()});
-
-    rpcClient.on('error', function() {
+  // these methods are only available in xmlrpc_bin library
+  if (rpcType === 'bin') {
+    rpcClient.on('error', function(err) {
       // to do
+      log.error('RPC: an error occured: ' + JSON.stringify(err));
     });
     rpcClient.on('connecting', function() {
-      // to do
+      log.info('RPC: connecting...');
+    });
+    rpcClient.on('reconnecting', function() {
+      log.info('RPC: reconnecting...');
     });
     rpcClient.on('connect', function() {
-      rpcClient.methodCall('init', [
-          // 'http://' + options.hmsrv.ip + ':' + options.serverPort.toString(),
-          'xmlrpc_bin://' + options.hmsrv.ip + ':' + options.hmsrv.rpcPort.toString(),
-          '123456'
-        ],
-        function (err, res) {
-          if (err) {
-            log.error('RPC: connecting to ccu rpc serverfailed.');
-          }
-          else {
-            rpcConnectionUp = true;
-            log.info('RPC: connection to ccu successfully established.');
-          }
-          if (typeof callback === 'function') {
-            callback();
-          }
-        }
-      );
+      rpcReconectCount = 0;
+      log.info('RPC: client connected.');
+      initRpcEventReceiver(callback);
+      callback = null; // do not callback on re-connect
     });
     rpcClient.on('close', function() {
-      // to do
-      log.info('RPC: connection closed!!!');
+      rpcEventReceiverConnected = false;
+      if (!stopping) {
+        // reconnect
+        rpcReconectCount++;
+        setTimeout(function() {
+          log.info('RPC: try to reconnect, approach ' + rpcReconectCount.toString());
+          rpcClient.connect(true);
+        }, rpcReconectTimeout);
+      }
+      log.info('RPC: connection closed.');
     });
-  }, 1000);
+  }
+  else {
+    initRpcEventReceiver(callback);
+  }
+}
+
+function initRpcEventReceiver(callback) {
+  var type = (rpcType === 'plain')? 'http://' : 'xmlrpc_bin://';
+  rpcClient.methodCall('init', [
+      type + options.hmsrv.ip + ':' + options.hmsrv.rpcPort.toString(),
+      '123456'
+    ],
+    function (err, res) {
+      if (err) {
+        rpcEventReceiverConnected = false;
+        log.error('RPC: "init" failed, retry in ' + rpcReconectTimeout.toString() + 's. ' + JSON.stringify(err));
+      }
+      else {
+        rpcEventReceiverConnected = true;
+        log.info('RPC: "init" successful.');
+      }
+      if (typeof callback === 'function') {
+        callback();
+      }
+    }
+  );
+}
+
+function closeRpc(callback) {
+  if (rpcEventReceiverConnected) {
+    var type = (rpcType === 'plain')? 'http://' : 'xmlrpc_bin://';
+    rpcClient.methodCall('init', [
+        type + options.hmsrv.ip + ':' + options.hmsrv.rpcPort.toString(),
+        ''
+      ],
+      function (err, res) {
+        if (err) {
+          log.error('RPC: error closing connection to ccu.');
+        }
+        else {
+          rpcEventReceiverConnected = false;
+          log.info('RPC: connection closed successfully');
+        }
+        if (typeof callback === 'function') {
+          callback();
+        }
+      }
+    );
+  }
+  else {
+    if (typeof callback === 'function') {
+      callback();
+    }
+  }
 }
 
 
@@ -305,21 +376,48 @@ function setupRpc(callback) {
  */
 function setupDatabase(callback) {
   log.info('DB: Initialize Database');
-  if (!fs.existsSync(databaseDir + databaseFile)) {
-    if (!fs.existsSync(databaseDir)) {
-      fs.mkdirSync(databaseDir);
+  if (!fs.existsSync(dbDir + '/' + dbFile)) {
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir);
     }
-    db.open(databaseDir + databaseFile, function() {
-      db.createTables(databaseDir + databaseFile, databaseTables);
-      log.info('DB: database created successfully.');
-      callback();
+    db.open(dbDir + '/' + dbFile, function() {
+      dbOpened = true;
+      db.createTables(dbTables, function() {
+        log.info('DB: database created successfully.');
+        callback();
+      });
     });
   }
   else {
-    db.open(databaseDir + databaseFile, function() {
+    db.open(dbDir + '/' + dbFile, function() {
+      dbOpened = true;
       log.info('DB: opened successfully.');
       callback();
     });
+  }
+}
+
+function flushDatabase(callback) {
+  if (dbCacheVals.length > 0) {
+    var vals = dbCacheVals;
+    dbCacheVals = [];
+    var valsFull = dbCacheValsFull;
+    dbCacheValsFull = [];
+
+    db.insertValues(dbTables[0], vals, function(count) {
+      log.info('DB: flushed ' + count + ' values into table VALS');
+      db.insertValues(dbTables[1], valsFull, function(count) {
+        log.info('DB: flushed ' + count + ' values into table VALSFULL');
+        if (typeof callback === 'function') {
+          callback();
+        }
+      });
+    });
+  }
+  else {
+    if (typeof callback === 'function') {
+      callback();
+    }
   }
 }
 
@@ -341,31 +439,43 @@ function setupFileSystem(callback) {
 }
 
 function logEvent(event) {
-  if (isNaN(event[3])) {
-    log.warn('RPC: non numeric value: ' + event[1] + ', ' + event[2] + ', ' + event[3]);
-  }
-  var id = dpIndex['BidCos-RF.' + event[1] + '.' + event[2]];
+  if (!stopping) {
+    var timestamp = new Date().getTime();
+    var id;
+    var address = event[1];
+    var name = event[2];
+    var value = parseInt(event[3], 10);
+    var status;
 
-  if (id !== undefined) {
-
-    var value = parseInt(event[3]);
-    var state = '';
-
-    if (dpValues[id] === undefined) {
-      state = 'new';
-      dpValues[id] = value;
-    }
-    else if (dpValues[id] === value) {
-      state = 'unchanged';
+    if (isNaN(value)) {
+      log.warn('RPC: non numeric value: ' + address + ', ' + name + ', ' + event[3]);
     }
     else {
-      state = 'changed';
-      dpValues[id] = value;
+      id = dpIndex['BidCos-RF.' + address + '.' + name];
+
+      if (id !== undefined) {
+        status = '';
+        if (dpValues[id] === undefined) {
+          status = 'new';
+          dpValues[id] = value;
+          // push to db queue
+          dbCacheVals.push({timestamp: timestamp, id: id, value: value});
+        }
+        else if (dpValues[id] === value) {
+          status = 'unchanged';
+        }
+        else {
+          status = 'changed';
+          dpValues[id] = value;
+          dbCacheVals.push({timestamp: timestamp, id: id, value: value});
+        }
+        log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
+        dbCacheValsFull.push({timestamp: timestamp, id: id, value: value});
+      }
+      else {
+        log.verbose('HMSRV: <unknown> ' + address + ', ' + name + ', ' + value);
+      }
     }
-    log.verbose('HMSRV: ' + state + ' - ' + id + ', ' + event[1] + ', ' + event[2] + ', ' + event[3]);
-  }
-  else {
-    log.verbose('HMSRV: <unknown> ' + event[1] + ', ' + event[2] + ', ' + event[3]);
   }
 }
 
@@ -375,30 +485,30 @@ function logEvent(event) {
 //
 process.on('SIGTERM', shutdown.bind(null, {event: 'SIGTERM'}));
 process.on('SIGINT', shutdown.bind(null, {event: 'SIGINT'}));
-process.on('exit', shutdown.bind(null, {event: 'exit'}));
 
 function shutdown(params) {
-  log.info('HMSRV: received "' + params.event + '"');
-  if (rpcConnectionUp) {
-    log.info('RPC: closing xml rpc connection...');
-    rpcClient.methodCall('init', [
-        'http://' + options.hmsrv.ip + ':' + options.hmsrv.rpcPort.toString(),
-        ''
-      ],
-      function (err, res) {
-        if (err) {
-          log.error('RPC(init): error closing connection to ccu.');
+  if (!stopping) {
+    stopping = true;
+    log.info('HMSRV: received "' + params.event + '", shutting down...');
+
+    closeRpc(function() {
+      flushDatabase(function() {
+        if (dbOpened) {
+          db.close(function(err) {
+            if (!err) {
+              dbOpened = false;
+              log.info('DB: closed successfully.');
+            }
+            else {
+              log.warn('DB: error closing database.');
+            }
+          });
         }
-        else {
-          rpcConnectionUp = false;
-          log.info('RPC(init): connection to ccu closed.');
-        }
-        process.exit(0);
-      }
-    );
-  }
-  else {
-    process.exit(0);
+        setTimeout(function() {
+          process.exit();
+        }, 2000);
+      });
+    });
   }
 }
 
@@ -411,38 +521,40 @@ function shutdown(params) {
 var startTime = log.time();
 
 setupFileSystem(function () {
-  setupRega(function() {
-    setupRpc(function() {
+  setupDatabase(function() {
+    setupRega(function() {
       loadPersistentRegaData(0, function() {
-      // loadRegaData(0, function() {
-        var dpCount = 0;
-        // build dpIndex for name <> id
-        for (var i in datapoints) {
-          dpIndex[unescape(datapoints[i].Name)] = i;
-          dpCount++;
-        }
-        for (i in dpIndex) {
-          log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
-        }
-        log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
-        // setupDatabase(function() {
-        log.time(startTime, 'HMSRV: Startup finished after ');
+        setupRpc(function() {
 
-        // // prevent node app from running as root permanently
-        // var uid = parseInt(process.env.SUDO_UID);
-        // // Set our server's uid to that user
-        // if (uid){
-        //   process.setuid(uid);
-        // }
-        // log.info('Server\'s UID is now ' + process.getuid());
+          var dpCount = 0;
+          // build dpIndex for name <> id
+          for (var i in datapoints) {
+            dpIndex[unescape(datapoints[i].Name)] = i;
+            dpCount++;
+          }
+          for (i in dpIndex) {
+            log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
+          }
+          log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
 
+          var dbFlushId = setInterval(function() {
+            flushDatabase();
+          }, dbFlushInterval);
 
-        // });
+          log.time(startTime, 'HMSRV: Startup finished successfully after ');
+
+          // // prevent node app from running as root permanently
+          // var uid = parseInt(process.env.SUDO_UID);
+          // // Set our server's uid to that user
+          // if (uid){
+          //   process.setuid(uid);
+          // }
+          // log.info('Server\'s UID is now ' + process.getuid());
+        });
       });
     });
   });
 });
-
 // mail.send('Huhuuu', 'test message', function() {
 // });
 

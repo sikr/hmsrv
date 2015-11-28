@@ -444,9 +444,10 @@ function logEvent(event) {
     var id;
     var address = event[1];
     var name = event[2];
-    var value = parseInt(event[3], 10);
+    var value = parseFloat(event[3]);
     var status;
     var store = true;
+
 
     if (isNaN(value)) {
       if (typeof event[3] === 'boolean') {

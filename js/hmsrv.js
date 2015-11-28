@@ -12,6 +12,11 @@
  * Commercial use disallowed
  *
  *
+ * Notes:
+ *
+ * convert to localtime in sqlite: "SELECT datetime(timestamp / 1000, 'unixepoch', 'localtime')"
+ *
+ *
  */
 
 (function() {
@@ -25,10 +30,11 @@ if (!fs.existsSync(__dirname + '/options.json')) {
   process.exit(1);
 }
 
-var log      = require('./logger.js');
-var mail     = require('./mail.js');
-var utils    = require('./utils');
-var options  = require('./options.json');
+var log     = require('./logger.js');
+var mail    = require('./mail.js');
+var utils   = require('./utils');
+var options = require('./options.json');
+var CronJob = require('cron').CronJob;
 
 //
 // REGA
@@ -120,6 +126,8 @@ var dbCacheVals = [];
 var dbCacheValsFull = [];
 var dbFlushId = 0;
 var dbFlushInterval = 60000;
+var countVals = 0;
+var countValsFull = 0;
 
 //
 // Homematic data
@@ -327,7 +335,7 @@ function initRpcEventReceiver(callback) {
     function (err, res) {
       if (err) {
         rpcEventReceiverConnected = false;
-        log.error('RPC: "init" failed, retry in ' + rpcReconectTimeout.toString() + 's. ' + JSON.stringify(err));
+        log.error('RPC: "init" failed.');
       }
       else {
         rpcEventReceiverConnected = true;
@@ -406,8 +414,10 @@ function flushDatabase(callback) {
 
     db.insertValues(dbTables[0], vals, function(count) {
       log.info('DB: flushed ' + count + ' values into table VALS');
+      countVals += count;
       db.insertValues(dbTables[1], valsFull, function(count) {
         log.info('DB: flushed ' + count + ' values into table VALSFULL');
+        countValsFull += count;
         if (typeof callback === 'function') {
           callback();
         }
@@ -488,6 +498,27 @@ function logEvent(event) {
   }
 }
 
+/******************************************************************************
+ *
+ * Filesystem
+ *
+ */
+function setupCron() {
+  var job = new CronJob({
+    cronTime: '0 0 12 * * 1-7',
+    onTick:  function () {
+      var summary = 'Wrote ' + countVals + ' values to table VALS, ' +
+                    countValsFull + ' to table VALSFULL\n\n Cheers, hmsrv';
+      mail.send('hmsrv summary', summary, function() {
+      });
+      countVals = 0;
+      countValsFull = 0;
+    },
+    start: true
+  });
+}
+
+
 
 //
 // ensure graceful shutdown
@@ -550,6 +581,8 @@ setupFileSystem(function () {
             flushDatabase();
           }, dbFlushInterval);
 
+          setupCron();
+
           log.time(startTime, 'HMSRV: Startup finished successfully after ');
 
           // // prevent node app from running as root permanently
@@ -564,7 +597,5 @@ setupFileSystem(function () {
     });
   });
 });
-// mail.send('Huhuuu', 'test message', function() {
-// });
 
 })();

@@ -19,6 +19,7 @@
   "license": "MIT",
   "dependencies": {
     "binrpc": "^0.1.3",
+    "cron": "^1.0.9",
     "daemonize2": "^0.4.2",
     "homematic-xmlrpc": "^1.0.1",
     "nodemailer": "^1.10.0",

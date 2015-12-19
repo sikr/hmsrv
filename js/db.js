@@ -229,7 +229,7 @@ function fillTable(table, callback) {
   });
 }
 
-exports.fillTables = function(tables) {
+exports.fillTables = function(tables, callback) {
   function fill(table) {
     if (table) {
       fillTable(table, function (cnt, err) {

@@ -16,10 +16,34 @@ Copy file js/options.dist.json to js/options.json and set the ip adress for the 
 
 ## Start
 
-To start on console:
+### To start on console:
 
     node js/hmsrv.js
 
-To start as daemon/service:
+### To start (and automatically restart) via systemd:
 
-    node hmsrv.d.js
+I'm not a systemd expert, but this works for me.
+
+Create a service file in /etc/systemd/system and name it "hmsrv.service"
+```
+[Service]
+ExecStart=/usr/local/bin/node /home/pi/hmsrv/js/hmsrv.js
+Restart=always
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=hmsrv
+User=pi
+#Group=nobody
+Environment=NODE_ENV=production
+WorkingDirectory=/home/pi/hmsrv/js
+```
+
+Enable the service:
+```
+    systemctl enable hmsrv
+```
+
+Start the service:
+```
+    systemctl start hmsrv
+```

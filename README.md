@@ -9,6 +9,7 @@ hmsrv uses [hobbyquaker's](https://github.com/hobbyquaker) Homematic rega implem
 git clone https://github.com/sikr/hmsrv.git
 cd hmsrv
 npm install
+bower install
 ```
 ## Configuration:
 

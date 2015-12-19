@@ -37,6 +37,20 @@ var options = require('./options.json');
 var CronJob = require('cron').CronJob;
 
 //
+// SERVER
+//
+var key         = fs.readFileSync('../ssl/key.pem');
+var certificate = fs.readFileSync('../ssl/cert.pem');
+var credentials = { key: key, cert: certificate};
+var express     = require('express');
+var app         = express();
+var socketio    = require('socket.io');
+var webSockets  = [];
+var io;
+var https       = require('https');
+var httpsServer = https.createServer(credentials, app);
+
+//
 // REGA
 //
 var Rega     = require('./rega.js');
@@ -143,6 +157,61 @@ var countValuesFull = 0;
 
 var stopping = false;
 var shutdownCount = 0;
+
+
+/******************************************************************************
+ *
+ * SERVER
+ *
+ */
+function setupServer() {
+
+  // static content webserver
+  app.use('/', express.static('../www/'));
+
+  // logging
+  app.use(function (req, res, next) {
+    log.info('HMSRV: request:' + req.url);
+    next();
+  });
+
+  // serv foo
+  app.get('/foo', function (req, res) {
+    // https://host:port/foo
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header('foo', 'bar');
+    res.send('{"msg": "Hello foo!"}');
+  });
+
+  // create secure server 
+  httpsServer.listen(443);
+
+  // websocket server
+  io = socketio.listen(httpsServer);
+
+  io.on('connection', function (socket) {
+    webSockets.push(socket);
+    log.info('HMSRV: websocket: %s successfully connected', socket.handshake.address);
+    socket.on('disconnect', function (socket) {
+      log.info('HMSRV: websocket: %s disconnected', this.handshake.address);
+    });
+    socket.on('system', function (data) {
+      var msg = JSON.parse(data).msg;
+      if (msg === 'shutdown') {
+        shutdown({event: 'usershutdown'});
+      }
+      log.debug(data);
+    });
+    // socket.emit('ping');
+  });
+  log.info('HMSRV: **** SCSW Server up and operational ****');
+}
+
+function pushToWebSockets(method, message) {
+  for (var socket in webSockets) {
+    webSockets[socket].emit(method, JSON.stringify(message));
+  }
+}
 
 
 /******************************************************************************
@@ -456,6 +525,11 @@ function closeDatabase(callback) {
       }
     });
   }
+  else {
+    if (typeof callback === 'function') {
+      callback();
+    }
+  }
 }
 
 /******************************************************************************
@@ -516,6 +590,7 @@ function logEvent(event) {
           dbCacheValues.push({timestamp: timestamp, id: id, value: value});
         }
         log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
+        pushToWebSockets('update', {status: status, id: id, address: address, name: name, value: value});
         dbCacheValuesFull.push({timestamp: timestamp, id: id, value: value});
       }
       else {
@@ -607,6 +682,8 @@ function exit() {
  */
 var startTime = log.time();
 
+// setupServer();
+
 setupFileSystem(function () {
   setupDatabase(function() {
     setupRega(function() {
@@ -616,7 +693,7 @@ setupFileSystem(function () {
           var dpCount = 0;
           // build datapoint Index name <> id
           for (var i in datapoints) {
-            dpIndex[unescape(datapoints[i].Name)] = i;
+            dpIndex[unescape(datapoints[i].Name)] = datapoints[i].Id;
             dpCount++;
           }
           for (i in dpIndex) {

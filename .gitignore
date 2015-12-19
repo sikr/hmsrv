@@ -1,5 +1,5 @@
 ____*
-components
+www/components
 data/*
 db/*
 hmsrv.sublime*
@@ -10,3 +10,4 @@ node_modules
 private*
 regascripts/output/*
 *.pid
+ssl

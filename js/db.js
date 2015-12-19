@@ -128,42 +128,44 @@ exports.readTableCount = function(table, callback) {
 };
 
 exports.readTables = function(tables, callback) {
-  var _tables = {};
-  function read(table) {
-    if (table) {
-      db.all('SELECT * FROM ' + table.name, [], function(err, data) {
-        if (!err) {
-          log.info('DB: successfully read table ' + table.name + ', ' + data.length + ' entries');
-          switch (table.name) {
-            case 'devices':
-              _tables.devices = data;
-              break;
-            case 'channels':
-              _tables.channels = data;
-              break;
-            case 'datapoints':
-              _tables.datapoints = data;
-              break;
-            case 'rooms':
-              _tables.rooms = data;
-              break;
-            default: 
-              log.error('DB: unknown table name "' + table.name + '"');
+  db.serialize(function() {
+    var _tables = {};
+    function read(table) {
+      if (table) {
+        db.all('SELECT * FROM ' + table.name, [], function(err, data) {
+          if (!err) {
+            log.info('DB: successfully read table ' + table.name + ', ' + data.length + ' entries');
+            switch (table.name) {
+              case 'devices':
+                _tables.devices = data;
+                break;
+              case 'channels':
+                _tables.channels = data;
+                break;
+              case 'datapoints':
+                _tables.datapoints = data;
+                break;
+              case 'rooms':
+                _tables.rooms = data;
+                break;
+              default: 
+                log.error('DB: unknown table name "' + table.name + '"');
+            }
+            return read(tables.shift());
           }
-          return read(tables.shift());
+          else {
+            log.error('DB: error reading data from table ' + table.name + ': ' + JSON.stringify(err));
+          }
+        });
+      }
+      else {
+        if (typeof callback === 'function') {
+          callback(_tables);
         }
-        else {
-          log.error('DB: error reading data from table ' + table.name + ': ' + JSON.stringify(err));
-        }
-      });
-    }
-    else {
-      if (typeof callback === 'function') {
-        callback(_tables);
       }
     }
-  }
-  read(tables.shift());
+    read(tables.shift());
+  });
 };
 
 

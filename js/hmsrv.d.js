@@ -1,5 +1,5 @@
 var daemon = require("daemonize2").setup({
-    main: "js/hmsrv.js",
+    main: "hmsrv.js",
     name: "hmsrv",
     pidfile: "hmsrv.pid"
 });

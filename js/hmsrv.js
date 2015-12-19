@@ -23,7 +23,7 @@
 
 'use strict';
 
-var fs       = require ('fs');
+var fs = require ('fs');
 
 if (!fs.existsSync(__dirname + '/options.json')) {
   console.error('File js/options.json is missing - copy js/options.dist.json to js/options.json and adapt to your ip adresses');
@@ -52,8 +52,9 @@ var rpcType = 'bin';
 var rpc     = (rpcType === 'bin') ? require('binrpc') : require('homematic-xmlrpc');
 var rpcClient;
 var rpcServer;
+var rpcServerUp = false;
 var rpcEventReceiverConnected = false;
-var rpcReconectTimeout = 20000;
+var rpcReconectTimeout = 20;
 var rpcReconectCount = 0;
 
 //
@@ -64,6 +65,16 @@ var directories = {
   db  : __dirname + '/../db',
   log : __dirname + '/../log'
 };
+
+//
+// Homematic data
+//
+var devices;
+var channels;
+var datapoints;
+var rooms;
+var dpIndex  = {};  // index of homematic adress > homeatic id
+var dpValues = [];  // latest datapoint values to identify changes
 
 //
 // DB
@@ -78,68 +89,60 @@ var tableValues =
   'id            INTEGER, ' +
   'value         REAL     ';
 
-var tableValuesFull =
-  'timestamp     INTEGER, ' +
-  'id            INTEGER, ' +
-  'value         REAL     ';
-
 var tableDevices = 
   'Id            INTEGER, ' +
-  'Address       TEXT   , ' + 
-  'HssType       TEXT   , ' + 
-  'Interface     TEXT   , ' + 
-  'Name          TEXT   , ' + 
-  'TypeName      TEXT   , ';
+  'Address       TEXT,    ' + 
+  'HssType       TEXT,    ' + 
+  'Interface     TEXT,    ' + 
+  'Name          TEXT,    ' + 
+  'TypeName      TEXT     ';
 
 var tableChannels =
   'Id            INTEGER, ' + 
-  'Address       TEXT   , ' + 
+  'Address       TEXT,    ' + 
   'ChannelType   INTEGER, ' +
   'ChnDirection  INTEGER, ' +
-  'ChnLabel      TEXT   , ' +
-  'HssType       TEXT   , ' +
-  'Name          TEXT   , ' +
+  'ChnLabel      TEXT,    ' +
+  'HssType       TEXT,    ' +
+  'Name          TEXT,    ' +
   'Parent        INTEGER, ' +
   'TypeName      TEXT     ';
 
 var tableDatapoints = 
   'Id            INTEGER, ' + 
-  'Name          TEXT   , ' + 
+  'Name          TEXT,    ' + 
   'Operations    INTEGER, ' + 
   'Parent        INTEGER, ' + 
   'Timestamp     INTEGER, ' + 
-  'TypeName      TEXT   , ' + 
+  'TypeName      TEXT,    ' + 
   'Value         INTEGER, ' + // boolean
+  'ValueList     TEXT,    ' +
   'ValueType     INTEGER, ' + 
-  'ValueUnit     TEXT     ' +
+  'ValueUnit     TEXT,    ' +
   'record        INTEGER  ';
 
 var tableRooms = 
   'Id            INTEGER, ' + 
-  'EnumInfo      TEXT   , ' + 
+  'EnumInfo      TEXT,    ' + 
   'Name          TEXT,    ' + 
-  'TypeName      TEXT,    ';
+  'TypeName      TEXT     ';
 
-var dbTables = [{'name': 'vals', 'sql': tableValues, 'data': null, 'clear': true},
-                {'name': 'valsFull', 'sql': tableValuesFull, 'data': null, 'clear': true}];
-var dbCacheVals = [];
-var dbCacheValsFull = [];
+var dbTables = {'values':     {'name': 'vals', 'sql': tableValues, 'data': null, 'clear': false},
+                'valuesFull': {'name': 'valsFull', 'sql': tableValues, 'data': null, 'clear': false},
+                'devices':    {'name': 'devices', 'sql': tableDevices, 'data': null, 'clear': false},
+                'channels':   {'name': 'channels', 'sql': tableChannels, 'data': null, 'clear': false},
+                'datapoints': {'name': 'datapoints', 'sql': tableDatapoints, 'data': null, 'clear': false},
+                'rooms':      {'name': 'rooms', 'sql': tableRooms, 'data': null, 'clear': false}};
+var dbCacheValues = [];
+var dbCacheValuesFull = [];
 var dbFlushId = 0;
-var dbFlushInterval = 60000;
-var countVals = 0;
-var countValsFull = 0;
+var dbFlushInterval = 60; // flush once a minute to db
+var countValues = 0;
+var countValuesFull = 0;
 
-//
-// Homematic data
-//
-var devices;
-var channels;
-var datapoints;
-var rooms;
-var dpIndex  = {};  // index of homematic adress > homeatic id
-var dpValues = [];  // latest datapoint values to identify unchanged
 
 var stopping = false;
+var shutdownCount = 0;
 
 
 /******************************************************************************
@@ -166,7 +169,52 @@ function setupRega(callback) {
   });
 }
 
-function loadRegaData(index, callback) {
+function loadRegaData(callback) {
+  db.readTableCount(dbTables.devices, function (err, data) {
+    if (err) {
+      log.error('HMSRV: error reading from database, ' + JSON.stringify(err));
+    }
+    else {
+      var tables = [dbTables.devices, dbTables.channels, dbTables.datapoints, dbTables.rooms];
+
+      if (data[0].count === 0) {
+        loadRegaDataFromCCU(0, function () {
+
+          // clean datapoints
+          for (var i in datapoints) {
+            datapoints[i].Timestamp = 0;
+            if (datapoints[i].ValueUnit === '') {
+              datapoints[i].ValueUnit = '';
+            }
+            if (datapoints[i].ValueList === undefined) {
+              datapoints[i].ValueList = '';
+            }
+          }
+          // write CCU rega data to db
+          db.fillTables(tables, function() {
+            if (typeof callback === 'function') {
+              callback();
+            }
+          });
+        });
+      }
+      else {
+        // read rega data from db
+        db.readTables(tables, function(_tables) {
+          devices = _tables.devices;
+          channels = _tables.channels;
+          datapoints = _tables.datapoints;
+          rooms = _tables.rooms;
+          if (typeof callback === 'function') {
+            callback();
+          }
+        });
+      }
+    }
+  });
+}
+
+function loadRegaDataFromCCU(index, callback) {
   if (index === 0) {
     regaHss.checkTime(function() {
     });
@@ -174,28 +222,28 @@ function loadRegaData(index, callback) {
 
   regaHss.runScriptFile(regaData[index], function(res, err) {
     if (!err) {
-      var data = JSON.parse(res.stdout);
+      var data = JSON.parse(unescape(res.stdout));
 
       if (regaData[index] === 'channels') {
-        channels = data;
+        channels =  dbTables.channels.data = data;
       }
       else if (regaData[index] === 'datapoints') {
-        datapoints = data;
+        datapoints = dbTables.datapoints.data = data;
       }
       else if (regaData[index] === 'devices') {
-        devices = data;
+        devices = dbTables.devices.data = data;
       }
       else if (regaData[index] === 'rooms') {
-        rooms = data;
+        rooms = dbTables.rooms.data = data;
       }
-      log.info('REGA: ' + regaData[index] + ' successfully read.');
+      log.info('REGA: ' + regaData[index] + ' successfully read, ' + data.length + ' entries.');
 
       // save persistent data to disk for further processing
       fs.writeFile(directories.data + '/persistence-' + regaData[index] + '.json', JSON.stringify(data));
 
       index++;
       if (index < regaData.length) {
-        loadRegaData(index, callback);
+        loadRegaDataFromCCU(index, callback);
       }
       else {
         if (typeof callback === 'function') {
@@ -204,47 +252,6 @@ function loadRegaData(index, callback) {
       }
     }
   });
-}
-
-function loadPersistentRegaData(index, callback) {
-  if (!fs.existsSync(directories.data + '/persistence-' + regaData[index] + '.json')) {
-    log.warn('REGA: File not found: ' + directories.data + '/persistence-' + regaData[index] + '.json');
-    log.info('REGA: Persistent rega data not found, trying to fetch from CCU...');
-    loadRegaData(0, function() {
-      if (typeof callback === 'function') {
-        callback();
-      }
-    });
-  }
-  else {
-    fs.readFile(__dirname + '/../data/persistence-' + regaData[index] + '.json', function(err, data) {
-      if (!err) {
-        if (regaData[index] === 'channels') {
-          channels = JSON.parse(data);
-        }
-        else if (regaData[index] === 'datapoints') {
-          datapoints = JSON.parse(data);
-        }
-        else if (regaData[index] === 'devices') {
-          devices = JSON.parse(data);
-        }
-        else if (regaData[index] === 'rooms') {
-          rooms = JSON.parse(data);
-        }
-        log.info('REGA: ' + directories.data + '/persistence-' + regaData[index] + '.json successfully read.');
-
-        index++;
-        if (index < regaData.length) {
-          loadPersistentRegaData(index, callback);
-        }
-        else {
-          if (typeof callback === 'function') {
-            callback();
-          }
-        }
-      }
-    });
-  }
 }
 
 
@@ -262,29 +269,34 @@ function setupRpc(callback) {
 }
 
 function setupRpcServer() {
-  rpcServer = rpc.createServer({host: options.hmsrv.ip, port: options.hmsrv.rpcPort.toString()});
+  if (rpcServerUp) {
+    log.warn('RPC: server is already up; wont start again');
+  }
+  else {
+    rpcServer = rpc.createServer({host: options.hmsrv.ip, port: options.hmsrv.rpcPort.toString()});
 
-  rpcServer.on('system.listMethods', function (err, params, callback) {
-      callback(['system.listMethods', 'system.multicall']);
-  });
-  rpcServer.on('system.multicall', function (err, params, callback) {
-    for (var i in params[0]) {
-      logEvent(params[0][i].params);
-    }
-    callback([]);
-  });
-  rpcServer.on('event', function (err, params, callback) {
-    logEvent(params);
-    if (typeof callback === 'function') {
-      callback();
-    }
-  });
-  rpcServer.on('NotFound', function (err, params, callback) {
-    log.warn('RPC: "NotFound" occured on method ' + err);
-    if (typeof callback === 'function') {
-      callback();
-    }
-  });
+    rpcServer.on('system.listMethods', function (err, params, callback) {
+        callback(['system.listMethods', 'system.multicall']);
+    });
+    rpcServer.on('system.multicall', function (err, params, callback) {
+      for (var i in params[0]) {
+        logEvent(params[0][i].params);
+      }
+      callback([]);
+    });
+    rpcServer.on('event', function (err, params, callback) {
+      logEvent(params);
+      if (typeof callback === 'function') {
+        callback();
+      }
+    });
+    rpcServer.on('NotFound', function (err, params, callback) {
+      log.warn('RPC: "NotFound" occured on method ' + err);
+      if (typeof callback === 'function') {
+        callback();
+      }
+    });
+  }
 }
 
 function setupRpcClient(callback) {
@@ -316,7 +328,7 @@ function setupRpcClient(callback) {
         setTimeout(function() {
           log.info('RPC: try to reconnect, approach ' + rpcReconectCount.toString());
           rpcClient.connect(true);
-        }, rpcReconectTimeout);
+        }, rpcReconectTimeout * 1000);
       }
       log.info('RPC: connection closed.');
     });
@@ -371,6 +383,7 @@ function closeRpc(callback) {
   }
   else {
     if (typeof callback === 'function') {
+      log.info('RPC: already closed');
       callback();
     }
   }
@@ -383,41 +396,37 @@ function closeRpc(callback) {
  *
  */
 function setupDatabase(callback) {
+  debugger;
   log.info('DB: Initialize Database');
-  if (!fs.existsSync(dbDir + '/' + dbFile)) {
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir);
-    }
-    db.open(dbDir + '/' + dbFile, function() {
-      dbOpened = true;
-      db.createTables(dbTables, function() {
-        log.info('DB: database created successfully.');
+  db.open(dbDir + '/' + dbFile, function() {
+    dbOpened = true;
+    log.info('DB: opened successfully.');
+    db.initialize(dbTables, function(err) {
+      if (!err) {
+        log.info('DB: database initialized successfully.');
         callback();
-      });
+      }
+      else {
+        log.error('DB: ' + err.msg);
+        // unrecoverable error: shutdown
+      }
     });
-  }
-  else {
-    db.open(dbDir + '/' + dbFile, function() {
-      dbOpened = true;
-      log.info('DB: opened successfully.');
-      callback();
-    });
-  }
+  });
 }
 
 function flushDatabase(callback) {
-  if (dbCacheVals.length > 0) {
-    var vals = dbCacheVals;
-    dbCacheVals = [];
-    var valsFull = dbCacheValsFull;
-    dbCacheValsFull = [];
+  if (dbCacheValues.length > 0) {
+    var values = dbCacheValues;
+    dbCacheValues = [];
+    var valuesFull = dbCacheValuesFull;
+    dbCacheValuesFull = [];
 
-    db.insertValues(dbTables[0], vals, function(count) {
-      log.info('DB: flushed ' + count + ' values into table VALS');
-      countVals += count;
-      db.insertValues(dbTables[1], valsFull, function(count) {
-        log.info('DB: flushed ' + count + ' values into table VALSFULL');
-        countValsFull += count;
+    db.insertValues(dbTables.values, values, function(count) {
+      log.info('DB: flushed ' + count + ' values into table VALUES');
+      countValues += count;
+      db.insertValues(dbTables.valuesFull, valuesFull, function(count) {
+        log.info('DB: flushed ' + count + ' values into table VALUESFULL');
+        countValuesFull += count;
         if (typeof callback === 'function') {
           callback();
         }
@@ -426,8 +435,27 @@ function flushDatabase(callback) {
   }
   else {
     if (typeof callback === 'function') {
+      log.info('DB: nothing to flush');
       callback();
     }
+  }
+}
+
+function closeDatabase(callback) {
+  if (dbOpened) {
+    db.close(function(err) {
+      if (!err) {
+        dbOpened = false;
+        log.info('DB: closed successfully.');
+      }
+      else {
+        log.warn('DB: error closing database. ' + JSON.stringify(err));
+        setTimeout(closeDatabase, 5000);
+      }
+      if (typeof callback === 'function') {
+        callback(err);
+      }
+    });
   }
 }
 
@@ -478,7 +506,7 @@ function logEvent(event) {
           status = 'new';
           dpValues[id] = value;
           // push to db queue
-          dbCacheVals.push({timestamp: timestamp, id: id, value: value});
+          dbCacheValues.push({timestamp: timestamp, id: id, value: value});
         }
         else if (dpValues[id] === value) {
           status = 'unchanged';
@@ -486,10 +514,10 @@ function logEvent(event) {
         else {
           status = 'changed';
           dpValues[id] = value;
-          dbCacheVals.push({timestamp: timestamp, id: id, value: value});
+          dbCacheValues.push({timestamp: timestamp, id: id, value: value});
         }
         log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
-        dbCacheValsFull.push({timestamp: timestamp, id: id, value: value});
+        dbCacheValuesFull.push({timestamp: timestamp, id: id, value: value});
       }
       else {
         log.verbose('HMSRV: <unknown> ' + address + ', ' + name + ', ' + value);
@@ -500,19 +528,19 @@ function logEvent(event) {
 
 /******************************************************************************
  *
- * Filesystem
+ * Cron
  *
  */
 function setupCron() {
   var job = new CronJob({
-    cronTime: '0 0 12 * * 1-7',
+    cronTime: '0 0 12 * * 0-6',
     onTick:  function () {
-      var summary = 'Wrote ' + countVals + ' values to table VALS, ' +
-                    countValsFull + ' to table VALSFULL\n\n Cheers, hmsrv';
+      var summary = 'Wrote ' + countValues + ' values to table VALUES, ' +
+                    countValuesFull + ' to table VALUESFULL\n\n Cheers, hmsrv';
       mail.send('hmsrv summary', summary, function() {
       });
-      countVals = 0;
-      countValsFull = 0;
+      countValues = 0;
+      countValuesFull = 0;
     },
     start: true
   });
@@ -525,30 +553,50 @@ function setupCron() {
 //
 process.on('SIGTERM', shutdown.bind(null, {event: 'SIGTERM'}));
 process.on('SIGINT', shutdown.bind(null, {event: 'SIGINT'}));
+process.on("uncaughtException", function(err) {
+  try {
+    var msg = JSON.stringify(err.stack);
+    if (options.hmsrv.productive === true) {
+      mail.send('hmsrv uncaughtException', msg, function() {
+      });
+    }
+    log.error(msg);
+    shutdown.bind(null, {event: 'uncaughtException'});
+  } catch (e) {
+    // ...?
+  }
+});
 
 function shutdown(params) {
   if (!stopping) {
     stopping = true;
-    log.info('HMSRV: received "' + params.event + '", shutting down...');
+    log.info('HMSRV: "' + params.event + '", shutting down...');
 
     closeRpc(function() {
       flushDatabase(function() {
-        if (dbOpened) {
-          db.close(function(err) {
-            if (!err) {
-              dbOpened = false;
-              log.info('DB: closed successfully.');
-            }
-            else {
-              log.warn('DB: error closing database.');
-            }
-          });
-        }
-        setTimeout(function() {
-          process.exit();
-        }, 2000);
+        closeDatabase(function() {
+          exit();
+        });
       });
     });
+  }
+}
+
+function exit() {
+  shutdownCount++;
+  if (!rpcEventReceiverConnected && !dbOpened) {
+    log.info('HMSRV: shutdown successful, bye!');
+    process.exit();
+  }
+  else if (shutdownCount > 2) {
+    log.warn('HMSRV: shutdown failed for 3 times, bye anyway!');
+    process.exit();
+  }
+  else {
+    log.info('HMSRV: shutdown still in progress...');
+    setTimeout(function() {
+      exit();
+    }, 10000);
   }
 }
 
@@ -563,11 +611,11 @@ var startTime = log.time();
 setupFileSystem(function () {
   setupDatabase(function() {
     setupRega(function() {
-      loadPersistentRegaData(0, function() {
+      loadRegaData(function() {
         setupRpc(function() {
 
           var dpCount = 0;
-          // build dpIndex for name <> id
+          // build datapoint Index name <> id
           for (var i in datapoints) {
             dpIndex[unescape(datapoints[i].Name)] = i;
             dpCount++;
@@ -579,7 +627,7 @@ setupFileSystem(function () {
 
           var dbFlushId = setInterval(function() {
             flushDatabase();
-          }, dbFlushInterval);
+          }, dbFlushInterval * 1000);
 
           setupCron();
 

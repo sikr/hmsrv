@@ -111,13 +111,4 @@ var logFile = fs.createWriteStream(logger.logfile, {
     flags: "a", encoding: "utf8", mode: 0644
 });
 
-process.on("uncaughtException", function(err) {
-  try {
-    console.log(JSON.stringify(err.stack));
-    logFile.write(err.stack);
-  } catch (e) {
-    // ...?
-  }
-});
-
 module.exports = logger;

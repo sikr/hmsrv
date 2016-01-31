@@ -856,7 +856,7 @@ function exit() {
   if (!rpcEventReceiverConnected && !dbOpened) {
     log.info('HMSRV: shutdown successful, bye!');
 
-    log.info('HMSRV is running for ' +
+    log.info('HMSRV was running for ' +
            utils.getHumanReadableTimeSpan(stats.startTime, new Date()) +
            ' since ' + utils.getPrettyDate(stats.startTime));
 

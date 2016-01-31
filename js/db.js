@@ -82,7 +82,7 @@ exports.initialize = function(tables, callback){
       }
       else {
         if (data && data[0] && data[0].count !== undefined) {
-          log.info('DB: table "' + table.name + '"" has ' + data[0].count + ' entries');
+          log.info('DB: table "' + table.name + '" has ' + data[0].count + ' entries');
           finish();
         }
       }

@@ -59,3 +59,15 @@ exports.getDate = function() {
          fill( d.getMinutes()   .toString(), 2) +
          fill( d.getSeconds()   .toString(), 2);
 };
+exports.getHumanReadableTimeSpan = function(time1, time2) {
+
+  var delta = Math.abs(time2 - time1) / 1000;
+  var days = Math.floor(delta / 86400);
+  delta -= days * 86400;
+  var hours = Math.floor(delta / 3600) % 24;
+  delta -= hours * 3600;
+  var minutes = Math.floor(delta / 60) % 60;
+  delta -= minutes * 60;
+  Math.round(seconds = delta % 60);
+  return days + ' days, ' + hours + ' hours, ' + minutes + ' minutes, ' + seconds + ' seconds';
+};

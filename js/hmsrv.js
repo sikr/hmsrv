@@ -40,7 +40,6 @@ var CronJob     = require('cron').CronJob;
 //
 // SERVER
 //
-var runMode     = 'DEVELOPMENT';
 var key         = fs.readFileSync('../ssl/key.pem');
 var certificate = fs.readFileSync('../ssl/cert.pem');
 var credentials = { key: key, cert: certificate};
@@ -51,6 +50,10 @@ var webSockets  = [];
 var io;
 var https       = require('https');
 var httpsServer = https.createServer(credentials, app);
+var stats       = {
+  startTime: new Date(),
+  runMode: 'DEVELOPMENT'
+};
 
 //
 // REGA
@@ -479,7 +482,7 @@ function loadRegaDataFromCCU(index, callback) {
       else if (regaData[index] === 'rooms') {
         rooms = data;
       }
-      log.info('REGA: ' + regaData[index] + ' successfully read, ' + data.length + ' entries.');
+      log.info('REGA: ' + regaData[index] + ' successfully read, ' + Object.keys(data).length + ' entries.');
 
       // // save persistent data to disk for further processing
       // fs.writeFile(directories.data + '/persistence-' + regaData[index] + '.json', JSON.stringify(data));
@@ -800,7 +803,9 @@ function setupCron() {
     cronTime: '0 0 12 * * 0-6',
     onTick:  function () {
       var summary = 'Wrote ' + countValues + ' values to table VALUES, ' +
-                    countValuesFull + ' to table VALUESFULL\n\n Cheers, hmsrv';
+                    countValuesFull + ' to table VALUESFULL\n\n Cheers, hmsrv\n\n';
+      summary += 'HMSRV is running for ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date());
+      summary += ' since ' + utils.getPrettyDate(stats.startTime);
       mail.send('hmsrv summary', summary, function() {
       });
       countValues = 0;
@@ -850,6 +855,11 @@ function exit() {
   shutdownCount++;
   if (!rpcEventReceiverConnected && !dbOpened) {
     log.info('HMSRV: shutdown successful, bye!');
+
+    log.info('HMSRV is running for ' +
+           utils.getHumanReadableTimeSpan(stats.startTime, new Date()) +
+           ' since ' + utils.getPrettyDate(stats.startTime));
+
     process.exit();
   }
   else if (shutdownCount > 2) {
@@ -867,12 +877,12 @@ function exit() {
 
 function parseArgs() {
 
-  for (var i = 0; i < process.argv.length; i++) {
-    if (process.argv[2] == '--production') {
-      runMode = 'PRODUCTION';
+  for (var i = 2; i < process.argv.length; i++) {
+    if (process.argv[i] == '--production') {
+      stats.runMode = 'PRODUCTION';
     }
-    else if (process.argv[2] == '--development') {
-      runMode = 'DEVELOPMENT';
+    else if (process.argv[i] == '--development') {
+      stats.runMode = 'DEVELOPMENT';
     }
     else {
       console.log('Error: uknown paramter ' + process.argv[2]);
@@ -890,7 +900,7 @@ var startTime = log.time();
 
 parseArgs();
 
-switch (runMode) {
+switch (stats.runMode) {
   case 'PRODUCTION':
   {
     options = optionsFile.production;
@@ -908,7 +918,7 @@ switch (runMode) {
   }
 }
 log.init(options);
-log.info('Starting HMSRV in ' + runMode + ' mode');
+log.info('Starting HMSRV in ' + stats.runMode + ' mode');
 log.info('Visit https://' + options.hmsrv.ip + ':' + options.hmsrv.httpsPort.toString());
 mail.init(options);
 

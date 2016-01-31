@@ -52,7 +52,9 @@ var https       = require('https');
 var httpsServer = https.createServer(credentials, app);
 var stats       = {
   startTime: new Date(),
-  runMode: 'DEVELOPMENT'
+  runMode: 'DEVELOPMENT',
+  servedRequests: 0,
+  servedRequestSize: 0
 };
 
 //
@@ -176,27 +178,36 @@ function setupServer() {
   // logging
   app.use(function (req, res, next) {
     log.info('HMSRV: request:' + req.url);
+    stats.servedRequests++;
     next();
   });
 
   app.get('/devices', function (req, res) {
     res.header("Access-Control-Allow-Origin", "*");
-    res.send(JSON.stringify(devices));
+    var responseData = JSON.stringify(devices);
+    stats.servedRequestSize += responseData.length;
+    res.send(responseData);
   });
 
   app.get('/channels', function (req, res) {
     res.header("Access-Control-Allow-Origin", "*");
-    res.send(JSON.stringify(channels));
+    var responseData = JSON.stringify(channels);
+    stats.servedRequestSize += responseData.length;
+    res.send(responseData);
   });
 
   app.get('/datapoints', function (req, res) {
     res.header("Access-Control-Allow-Origin", "*");
-    res.send(JSON.stringify(datapoints));
+    var responseData = JSON.stringify(datapoints);
+    stats.servedRequestSize += responseData.length;
+    res.send(responseData);
   });
 
   app.get('/rooms', function (req, res) {
     res.header("Access-Control-Allow-Origin", "*");
-    res.send(JSON.stringify(rooms));
+    var responseData = JSON.stringify(rooms);
+    stats.servedRequestSize += responseData.length;
+    res.send(responseData);
   });
 
   app.get('/values', function (req, res) {
@@ -204,11 +215,16 @@ function setupServer() {
     var id = parseInt(req.query.id, 10);
     if (!isNaN(id)) {
       db.readId(dbTables.values, id, function(err, data) {
+        var responseData;
         if (!err) {
-         res.send(JSON.stringify(data));
+          responseData = JSON.stringify(data);
+          stats.servedRequestSize += responseData.length;
+          res.send(responseData);
         }
         else {
-          res.send({'msg': 'error reading database'});
+          responseData = {'msg': 'error reading database'};
+          stats.servedRequestSize += responseData.length;
+          res.send(responseData);
         }
       });
     }

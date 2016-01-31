@@ -2,7 +2,7 @@
   "development" :
   {
     "hmsrv": {
-      "ip": "0.0.0.0.",
+      "ip": "0.0.0.0",
       "httpsPort": 1443,
       "rpcPort": 8081,
       "productive": false

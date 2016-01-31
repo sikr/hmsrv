@@ -252,5 +252,52 @@ exports.fillTables = function(tables, callback) {
   fill(tables.shift());
 };
 
+exports.readLatestValues = function(table, callback) {
+  var sql = 'SELECT  datetime(timestamp / 1000, "unixepoch", "localtime") AS timestamp,' +
+            '        id AS _id,' +
+            '        value ' +
+            'FROM    vals ' +
+            'WHERE   timestamp = (' +
+            '            SELECT MAX(timestamp)' +
+            '            FROM   vals' +
+            '            WHERE  id = _id' +
+            '        )';
+  db.all(sql, function(err, data) {
+    if (err) {
+      callback({msg: 'DB: error reading from table "' + table.name + '": ' + sql});
+    }
+    else {
+      callback(null, data);
+    }
+  });
+};
+
+exports.readId = function(table, id, callback) {
+  var sql = 'SELECT  datetime(timestamp / 1000, "unixepoch", "localtime") AS timestamp,' +
+            '        value ' +
+            'FROM    vals ' +
+            'WHERE   id = ' + id;
+  db.all(sql, function(err, data) {
+    if (err) {
+      callback({msg: 'DB: error reading from table "' + table.name + '": ' + sql});
+    }
+    else {
+      callback(null, data);
+    }
+  });
+};
+
+// exports.readId = function(table, id, callback) {
+//   var sql = 'SELECT * FROM ' + table.name + ' WHERE id=' + _id.toString();
+//   db.all(sql, function(err, data) {
+//     if (err) {
+//       callback({msg: 'DB: error reading from table "' + table.name + '": ' + sql});
+//     }
+//     else {
+//       callback(null, data);
+//     }
+//   });
+// };
+
 
 })();

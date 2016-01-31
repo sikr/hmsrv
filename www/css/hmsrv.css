@@ -1,0 +1,37 @@
+body {
+  font-family: Verdana, Geneva, sans-serif;
+  font-size: 0.75em;
+}
+
+table {
+  border: 1px solid #ccc;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+tr:hover {
+  background-color: #ddd;
+}
+
+th, td {
+  padding: 4px 8px;
+  border-color: #ccc;
+  border-top-width: 1px;
+  border-right-width: 0;
+  border-bottom-width: 1px;
+  border-left-width: 0;
+  border-style: solid;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+th {
+  background-color: #efefef;
+}
+

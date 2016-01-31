@@ -1,31 +1,68 @@
 {
-  "hmsrv": {
-    "ip": "0.0.0.0.",
-    "rpcPort": 8082,
-    "productive": false
-  },
-  "ccu": {
-    "ip": "0.0.0.0",
-    "rpcPort": 2001
-  },
-  "log": {
-    "file": {
-      "name": "log/hmsrv.log",
-      "level": 2,
-      "maxLength": -1
-      },
-    "console": {
-      "maxLength": 139,
-      "level": 2,
-      "colored": true
+  "development" :
+  {
+    "hmsrv": {
+      "ip": "0.0.0.0.",
+      "httpsPort": 1443,
+      "rpcPort": 8081,
+      "productive": false
+    },
+    "ccu": {
+      "ip": "0.0.0.0",
+      "rpcPort": 2001
+    },
+    "log": {
+      "file": {
+        "name": "log/hmsrv-dev.log",
+        "level": 2,
+        "maxLength": -1
+        },
+      "console": {
+        "maxLength": 139,
+        "level": 2,
+        "colored": true
+      }
+    },
+    "mail": {
+      "host": "smtp.foo.com",
+      "port": 587,
+      "user": "foo@foo.com",
+      "password": "bar",
+      "secure": true,
+      "recipient": "bar@bar.com"
     }
   },
-  "mail": {
-    "host": "smtp.foo.com",
-    "port": 587,
-    "user": "foo@foo.com",
-    "password": "bar",
-    "secure": true,
-    "recipient": "bar@bar.com"
+  "production" :
+  {
+    "hmsrv": {
+      "ip": "0.0.0.0.",
+      "httpsPort": 443,
+      "rpcPort": 8082,
+      "productive": false
+    },
+    "ccu": {
+      "ip": "0.0.0.0",
+      "rpcPort": 2001
+    },
+    "log": {
+      "file": {
+        "name": "log/hmsrv-prod.log",
+        "level": 2,
+        "maxLength": -1
+        },
+      "console": {
+        "maxLength": 139,
+        "level": 2,
+        "colored": true
+      }
+    },
+    "mail": {
+      "host": "smtp.foo.com",
+      "port": 587,
+      "user": "foo@foo.com",
+      "password": "bar",
+      "secure": true,
+      "recipient": "bar@bar.com"
+    }
   }
 }

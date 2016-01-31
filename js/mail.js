@@ -2,26 +2,31 @@
 
 'use strict';
 
-var mailer  = require('nodemailer');
-var smtp    = require('nodemailer-smtp-transport');
-var log     = require('./logger.js');
-var options = require('./options.json');
+var mailer = require('nodemailer');
+var smtp   = require('nodemailer-smtp-transport');
+var log    = require('./logger.js');
 
 var mail = {
 
-  transport: mailer.createTransport(smtp({
-    host: options.mail.host,
-    port: options.mail.port,
-    auth: {
-        user: options.mail.user,
-        pass: options.mail.password,
-        secure: options.mail.secure
-    }
-  })),
+  options: null,
+  transport: null,
+
+  init: function(options) {
+    this.options = options;
+    this.transport = mailer.createTransport(smtp({
+      host: this.options.mail.host,
+      port: this.options.mail.port,
+      auth: {
+          user: this.options.mail.user,
+          pass: this.options.mail.password,
+          secure: this.options.mail.secure
+      }
+    }));
+  },
   send: function(subject, message, callback) {
     var mailOptions = {
-        from: options.mail.user,
-        to: options.mail.recipient,
+        from: this.options.mail.user,
+        to: this.options.mail.recipient,
         subject: subject,
         text: message
     };
@@ -31,7 +36,7 @@ var mail = {
           log.error('MAIL: ' + error);
         }
         else {
-          log.info('MAIL: sent message to ' + options.mail.recipient + ': ' + info.response);
+          log.info('MAIL: sent message to ' + this.options.mail.recipient + ': ' + info.response);
         }
         if (typeof callback === 'function') {
           callback();

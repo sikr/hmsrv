@@ -16,12 +16,15 @@
 
 var fs      = require('fs');
 var utils   = require('./utils.js');
-var options = require('./options.json');
+var logFile;
 
 var logger = {
 
-  logfile: __dirname + '/../' + options.log.file.name,
+  initialized: false,
   level: 0,
+
+  logfile: null,
+  options: null,
 
   // time measurement
   id: 0,
@@ -36,6 +39,14 @@ var logger = {
     5: 'error:   '
   },
 
+  init: function(options) {
+    this.options = options;
+    this.logfile = __dirname + '/../' + this.options.log.file.name;
+    logFile = fs.createWriteStream(this.logfile, {
+        flags: "a", encoding: "utf8", mode: 0644
+    });
+    initialized = true;
+  },
   debug: function(message) {
     this.log(0, message);
   },
@@ -81,34 +92,30 @@ var logger = {
       msg = message.replace(/(\r\n|\n|\r)/gm,"");
     }
 
-    if (options.log.file && level >= options.log.file.level) {
+    if (this.options.log.file && level >= this.options.log.file.level) {
       msgFile = utils.getPrettyDate();
       msgFile += ' ' + this.type[level];
       msgFile += msg;
 
-      if (options.log.file.maxLength != -1 &&
-          msgFile.length > options.log.file.maxLength) {
-        msgFile = msgFile.slice(0, options.log.file.maxLength - 4) + " ...";
+      if (this.options.log.file.maxLength != -1 &&
+          msgFile.length > this.options.log.file.maxLength) {
+        msgFile = msgFile.slice(0, this.options.log.file.maxLength - 4) + " ...";
       }
       logFile.write(msgFile + '\n');
     }
 
-    if (options.log.console  && level >= options.log.console.level) {
+    if (this.options.log.console  && level >= this.options.log.console.level) {
       msgConsole = utils.getPrettyDate();
       msgConsole += ' ' + this.type[level];
       msgConsole += msg;
 
-      if (options.log.console.maxLength != -1 &&
-          msgConsole.length > options.log.console.maxLength) {
-        msgConsole = msgConsole.slice(0, options.log.console.maxLength - 4) + " ...";
+      if (this.options.log.console.maxLength != -1 &&
+          msgConsole.length > this.options.log.console.maxLength) {
+        msgConsole = msgConsole.slice(0, this.options.log.console.maxLength - 4) + " ...";
       }
       console.log(msgConsole);
     }
   }
 };
-
-var logFile = fs.createWriteStream(logger.logfile, {
-    flags: "a", encoding: "utf8", mode: 0644
-});
 
 module.exports = logger;

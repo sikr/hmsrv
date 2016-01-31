@@ -30,15 +30,17 @@ if (!fs.existsSync(__dirname + '/options.json')) {
   process.exit(1);
 }
 
-var log     = require('./logger.js');
-var mail    = require('./mail.js');
-var utils   = require('./utils');
-var options = require('./options.json');
-var CronJob = require('cron').CronJob;
+var log         = require('./logger.js');
+var mail        = require('./mail.js');
+var utils       = require('./utils');
+var optionsFile = require('./options.json');
+var options     = null;
+var CronJob     = require('cron').CronJob;
 
 //
 // SERVER
 //
+var runMode     = 'DEVELOPMENT';
 var key         = fs.readFileSync('../ssl/key.pem');
 var certificate = fs.readFileSync('../ssl/cert.pem');
 var credentials = { key: key, cert: certificate};
@@ -53,10 +55,10 @@ var httpsServer = https.createServer(credentials, app);
 //
 // REGA
 //
-var Rega     = require('./rega.js');
-var regaData = ['channels', 'datapoints', 'devices', 'rooms'];
+var Rega        = require('./rega.js');
+var regaData    = ['channels', 'datapoints', 'devices', 'rooms'];
 var regaHss;
-var regaUp   = false;
+var regaUp      = false;
 
 //
 // RPC
@@ -142,18 +144,17 @@ var tableRooms =
   'TypeName      TEXT     ';
 
 var dbTables = {'values':     {'name': 'vals', 'sql': tableValues, 'data': null, 'clear': false},
-                'valuesFull': {'name': 'valsFull', 'sql': tableValues, 'data': null, 'clear': false},
-                'devices':    {'name': 'devices', 'sql': tableDevices, 'data': null, 'clear': false},
-                'channels':   {'name': 'channels', 'sql': tableChannels, 'data': null, 'clear': false},
-                'datapoints': {'name': 'datapoints', 'sql': tableDatapoints, 'data': null, 'clear': false},
-                'rooms':      {'name': 'rooms', 'sql': tableRooms, 'data': null, 'clear': false}};
+                'valuesFull': {'name': 'valsFull', 'sql': tableValues, 'data': null, 'clear': false}};
+                // 'devices':    {'name': 'devices', 'sql': tableDevices, 'data': null, 'clear': false},
+                // 'channels':   {'name': 'channels', 'sql': tableChannels, 'data': null, 'clear': false},
+                // 'datapoints': {'name': 'datapoints', 'sql': tableDatapoints, 'data': null, 'clear': false},
+                // 'rooms':      {'name': 'rooms', 'sql': tableRooms, 'data': null, 'clear': false}};
 var dbCacheValues = [];
 var dbCacheValuesFull = [];
 var dbFlushId = 0;
 var dbFlushInterval = 60; // flush once a minute to db
 var countValues = 0;
 var countValuesFull = 0;
-
 
 var stopping = false;
 var shutdownCount = 0;
@@ -175,16 +176,58 @@ function setupServer() {
     next();
   });
 
-  // serv foo
-  app.get('/foo', function (req, res) {
-    // https://host:port/foo
+  app.get('/devices', function (req, res) {
     res.header("Access-Control-Allow-Origin", "*");
-    res.header('foo', 'bar');
-    res.send('{"msg": "Hello foo!"}');
+    res.send(JSON.stringify(devices));
+  });
+
+  app.get('/channels', function (req, res) {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.send(JSON.stringify(channels));
+  });
+
+  app.get('/datapoints', function (req, res) {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.send(JSON.stringify(datapoints));
+  });
+
+  app.get('/rooms', function (req, res) {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.send(JSON.stringify(rooms));
+  });
+
+  app.get('/values', function (req, res) {
+    res.header("Access-Control-Allow-Origin", "*");
+    var id = parseInt(req.query.id, 10);
+    if (!isNaN(id)) {
+      db.readId(dbTables.values, id, function(err, data) {
+        if (!err) {
+         res.send(JSON.stringify(data));
+        }
+        else {
+          res.send({'msg': 'error reading database'});
+        }
+      });
+    }
+  });
+
+  app.get('/value', function (req, res) {
+    res.header("Access-Control-Allow-Origin", "*");
+    var id = parseInt(req.query.id, 10);
+    if (!isNaN(id)) {
+      if (dpValues[id] !== undefined) {
+        var result = {id: id, timestamp: dpValues[id].timstamp, value: dpValues[id].value};
+        res.send(JSON.stringify(result));
+      }
+      else {
+        res.send('{"msg": "not available"}');
+      }
+    }
   });
 
   // create secure server 
-  httpsServer.listen(443);
+  var port = options.hmsrv.httpsPort || 443;
+  httpsServer.listen(port);
 
   // websocket server
   io = socketio.listen(httpsServer);
@@ -204,7 +247,6 @@ function setupServer() {
     });
     // socket.emit('ping');
   });
-  log.info('HMSRV: **** SCSW Server up and operational ****');
 }
 
 function pushToWebSockets(method, message) {
@@ -239,48 +281,180 @@ function setupRega(callback) {
 }
 
 function loadRegaData(callback) {
-  db.readTableCount(dbTables.devices, function (err, data) {
-    if (err) {
-      log.error('HMSRV: error reading from database, ' + JSON.stringify(err));
+  loadRegaDataFromFile(function(ret) {
+    if (ret === false) {
+      loadRegaDataFromCCU(0, function () {
+
+        // clean datapoints
+        for (var i in datapoints) {
+          datapoints[i].Timestamp = 0;
+          // if (datapoints[i].ValueUnit === '') {
+          //   datapoints[i].ValueUnit = '';
+          // }
+          // if (datapoints[i].ValueList === undefined) {
+          //   datapoints[i].ValueList = '';
+          // }
+        }
+        writeRegaDataToFile(callback);
+      });
     }
     else {
-      var tables = [dbTables.devices, dbTables.channels, dbTables.datapoints, dbTables.rooms];
-
-      if (data[0].count === 0) {
-        loadRegaDataFromCCU(0, function () {
-
-          // clean datapoints
-          for (var i in datapoints) {
-            datapoints[i].Timestamp = 0;
-            if (datapoints[i].ValueUnit === '') {
-              datapoints[i].ValueUnit = '';
-            }
-            if (datapoints[i].ValueList === undefined) {
-              datapoints[i].ValueList = '';
-            }
-          }
-          // write CCU rega data to db
-          db.fillTables(tables, function() {
-            if (typeof callback === 'function') {
-              callback();
-            }
-          });
-        });
-      }
-      else {
-        // read rega data from db
-        db.readTables(tables, function(_tables) {
-          devices = _tables.devices;
-          channels = _tables.channels;
-          datapoints = _tables.datapoints;
-          rooms = _tables.rooms;
-          if (typeof callback === 'function') {
-            callback();
-          }
-        });
+      if (typeof callback === 'function') {
+        callback();
       }
     }
   });
+
+  // db.readTableCount(dbTables.devices, function (err, data) {
+  //   if (err) {
+  //     log.error('HMSRV: error reading from database, ' + JSON.stringify(err));
+  //   }
+  //   else {
+  //     var tables = [dbTables.devices, dbTables.channels, dbTables.datapoints, dbTables.rooms];
+
+  //     if (data[0].count === 0) {
+  //       loadRegaDataFromCCU(0, function () {
+
+  //         // clean datapoints
+  //         for (var i in datapoints) {
+  //           datapoints[i].Timestamp = 0;
+  //           if (datapoints[i].ValueUnit === '') {
+  //             datapoints[i].ValueUnit = '';
+  //           }
+  //           if (datapoints[i].ValueList === undefined) {
+  //             datapoints[i].ValueList = '';
+  //           }
+  //         }
+  //         // write CCU rega data to db
+  //         db.fillTables(tables, function() {
+  //           if (typeof callback === 'function') {
+  //             callback();
+  //           }
+  //         });
+  //       });
+  //     }
+  //     else {
+  //       // read rega data from db
+  //       db.readTables(tables, function(_tables) {
+  //         devices = _tables.devices;
+  //         channels = _tables.channels;
+  //         datapoints = _tables.datapoints;
+  //         rooms = _tables.rooms;
+  //         if (typeof callback === 'function') {
+  //           callback();
+  //         }
+  //       });
+  //     }
+  //   }
+  // });
+}
+
+function writeRegaDataToFile(callback) {
+  var _regaData = [];
+  var i;
+
+  for (i in regaData) {
+    _regaData.push(regaData[i]);
+  }
+
+  function write(fileName) {
+    if (fileName) {
+      var fullPath = __dirname + '/../data/' + fileName + '.json';
+      var data;
+      switch (fileName) {
+        case 'channels':
+          data = JSON.stringify(channels);
+          break;
+        case 'datapoints' :
+          data = JSON.stringify(datapoints);
+          break;
+        case 'devices' :
+          data = JSON.stringify(devices);
+          break;
+        case 'rooms' :
+          data = JSON.stringify(rooms);
+          break;
+        default:
+          log.error('HMSRV: error writing rega data to file, unknown file: ' + fullPath);
+          break;
+      }
+      fs.writeFile(fullPath, data, function(err, data) {
+        if (err) {
+          log.error('HMSRV: error reading rega data from file: ' + fullPath);
+        }
+        else {
+        }
+        return write(_regaData.shift());
+      });
+    }
+    else {
+      if (typeof callback === 'function') {
+        callback(true);
+      }
+    }
+  }
+  write(_regaData.shift());
+}
+
+function loadRegaDataFromFile(callback) {
+  var _regaData = [];
+  var i;
+
+  for (i in regaData) {
+    _regaData.push(regaData[i]);
+  }
+
+  function read(fileName) {
+    if (fileName) {
+      var fullPath = __dirname + '/../data/' + fileName + '.json';
+      fs.stat(fullPath, function(err, stats) {
+        if (err) {
+          // file does not exist
+          callback(false);
+        }
+        else {
+          if (stats.isFile()) {
+            fs.readFile(fullPath, function(err, data) {
+              if (err) {
+                log.error('HMSRV: error reading rega data from file: ' + fullPath);
+              }
+              else {
+                switch (fileName) {
+                  case 'channels':
+                    channels = JSON.parse(data);
+                    break;
+                  case 'datapoints':
+                    datapoints = JSON.parse(data);
+                    break;
+                  case 'devices':
+                    devices = JSON.parse(data);
+                    break;
+                  case 'rooms':
+                    rooms = JSON.parse(data);
+                    break;
+                  default:
+                    log.error('HMSRV: error reading rega data from file, unknown file: ' + fullPath);
+                    break;
+                }
+              }
+              return read(_regaData.shift());
+            });
+          }
+          else {
+            log.error('HMSRV: cannot read from file ' + fullPath);
+            // unrecoverable error: shutdown
+            shutdown({event: 'emergenacyshutdown'});
+          }
+        }
+      });
+    }
+    else {
+      if (typeof callback === 'function') {
+        callback(true);
+      }
+    }
+  }
+  read(_regaData.shift());
 }
 
 function loadRegaDataFromCCU(index, callback) {
@@ -294,21 +468,21 @@ function loadRegaDataFromCCU(index, callback) {
       var data = JSON.parse(unescape(res.stdout));
 
       if (regaData[index] === 'channels') {
-        channels =  dbTables.channels.data = data;
+        channels = data;
       }
       else if (regaData[index] === 'datapoints') {
-        datapoints = dbTables.datapoints.data = data;
+        datapoints = data;
       }
       else if (regaData[index] === 'devices') {
-        devices = dbTables.devices.data = data;
+        devices = data;
       }
       else if (regaData[index] === 'rooms') {
-        rooms = dbTables.rooms.data = data;
+        rooms = data;
       }
       log.info('REGA: ' + regaData[index] + ' successfully read, ' + data.length + ' entries.');
 
-      // save persistent data to disk for further processing
-      fs.writeFile(directories.data + '/persistence-' + regaData[index] + '.json', JSON.stringify(data));
+      // // save persistent data to disk for further processing
+      // fs.writeFile(directories.data + '/persistence-' + regaData[index] + '.json', JSON.stringify(data));
 
       index++;
       if (index < regaData.length) {
@@ -472,11 +646,27 @@ function setupDatabase(callback) {
     db.initialize(dbTables, function(err) {
       if (!err) {
         log.info('DB: database initialized successfully.');
-        callback();
+        // db.readLatestValues(dbTables.values, function(err, data) {
+        //   if (!err) {
+        //     for (var i in data) {
+        //       dpValues[data[i]._id] = {timestamp: data[i].timestamp, value: data[i].value};
+        //     }
+        //     callback();
+        //   }
+        //   else {
+        //     log.error('DB: ' + err.msg);
+        //     // unrecoverable error: shutdown
+        //     shutdown({event: 'emergenacyshutdown'});
+        //   }
+        // });
+        if (typeof callback === 'function') {
+          callback();
+        }
       }
       else {
         log.error('DB: ' + err.msg);
         // unrecoverable error: shutdown
+        shutdown({event: 'emergenacyshutdown'});
       }
     });
   });
@@ -577,16 +767,16 @@ function logEvent(event) {
         status = '';
         if (dpValues[id] === undefined) {
           status = 'new';
-          dpValues[id] = value;
+          dpValues[id] = {timestamp: timestamp, value: value};
           // push to db queue
           dbCacheValues.push({timestamp: timestamp, id: id, value: value});
         }
-        else if (dpValues[id] === value) {
+        else if (dpValues[id].value === value) {
           status = 'unchanged';
         }
         else {
           status = 'changed';
-          dpValues[id] = value;
+          dpValues[id] = {timestamp: timestamp, value: value};
           dbCacheValues.push({timestamp: timestamp, id: id, value: value});
         }
         log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
@@ -675,6 +865,22 @@ function exit() {
 }
 
 
+function parseArgs() {
+
+  for (var i = 0; i < process.argv.length; i++) {
+    if (process.argv[2] == '--production') {
+      runMode = 'PRODUCTION';
+    }
+    else if (process.argv[2] == '--development') {
+      runMode = 'DEVELOPMENT';
+    }
+    else {
+      console.log('Error: uknown paramter ' + process.argv[2]);
+      exit();
+    }
+  }
+}
+
 /******************************************************************************
  *
  * MAIN
@@ -682,7 +888,31 @@ function exit() {
  */
 var startTime = log.time();
 
-// setupServer();
+parseArgs();
+
+switch (runMode) {
+  case 'PRODUCTION':
+  {
+    options = optionsFile.production;
+    break;
+  }
+  case 'DEVELOPMENT':
+  {
+    options = optionsFile.development;
+    break;
+  }
+  default:
+  {
+    log.error('HMSRV: unknown run mode');
+    exit();
+  }
+}
+log.init(options);
+log.info('Starting HMSRV in ' + runMode + ' mode');
+log.info('Visit https://' + options.hmsrv.ip + ':' + options.hmsrv.httpsPort.toString());
+mail.init(options);
+
+setupServer();
 
 setupFileSystem(function () {
   setupDatabase(function() {
@@ -693,7 +923,7 @@ setupFileSystem(function () {
           var dpCount = 0;
           // build datapoint Index name <> id
           for (var i in datapoints) {
-            dpIndex[unescape(datapoints[i].Name)] = datapoints[i].Id;
+            dpIndex[unescape(datapoints[i].Name)] = i;
             dpCount++;
           }
           for (i in dpIndex) {
@@ -707,7 +937,7 @@ setupFileSystem(function () {
 
           setupCron();
 
-          log.time(startTime, 'HMSRV: Startup finished successfully after ');
+          log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
 
           // // prevent node app from running as root permanently
           // var uid = parseInt(process.env.SUDO_UID);

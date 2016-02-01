@@ -21,7 +21,10 @@ var getData = function(name, callback) {
 };
 
 $('#b1').click(function result() {
-  socket.emit('system', '{"msg": "shutdown"}');
+  var answer = confirm('Do you reallý want to shutdown HMSRV?');
+  if (answer === true) {
+    socket.emit('system', '{"msg": "shutdown"}');
+  }
 });
 
 $('#b2').click(function result() {

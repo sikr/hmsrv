@@ -36,7 +36,7 @@ var mail = {
           log.error('MAIL: ' + error);
         }
         else {
-          log.info('MAIL: sent message to ' + this.options.mail.recipient + ': ' + info.response);
+          log.info('MAIL: sent message to ' + info.accepted.join(',') + ': ' + info.response);
         }
         if (typeof callback === 'function') {
           callback();

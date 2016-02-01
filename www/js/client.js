@@ -24,6 +24,10 @@ $('#b1').click(function result() {
   socket.emit('system', '{"msg": "shutdown"}');
 });
 
+$('#b2').click(function result() {
+  socket.emit('system', '{"msg": "mail"}');
+});
+
 function createTable(id, d) {
   var body = $('body');
   var container = $('<div class="container"></div>').appendTo(body);

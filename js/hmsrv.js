@@ -262,6 +262,10 @@ function setupServer() {
       if (msg === 'shutdown') {
         shutdown({event: 'usershutdown'});
       }
+      else if (msg === 'mail') {
+        mail.send('hmsrv test mail\n\n', getSummary(), function() {
+        });
+      }
       log.debug(data);
     });
     // socket.emit('ping');
@@ -818,11 +822,7 @@ function setupCron() {
   var job = new CronJob({
     cronTime: '0 0 12 * * 0-6',
     onTick:  function () {
-      var summary = 'Wrote ' + countValues + ' values to table VALUES, ' +
-                    countValuesFull + ' to table VALUESFULL\n\n Cheers, hmsrv\n\n';
-      summary += 'HMSRV is running for ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date());
-      summary += ' since ' + utils.getPrettyDate(stats.startTime);
-      mail.send('hmsrv summary', summary, function() {
+      mail.send('hmsrv summary', getSummary(), function() {
       });
       countValues = 0;
       countValuesFull = 0;
@@ -831,7 +831,14 @@ function setupCron() {
   });
 }
 
-
+function getSummary() {
+  return 'Wrote ' + countValues + ' values to table VALUES, ' +
+         countValuesFull + ' to table VALUESFULL\n\n' +
+         'This instance of HMSRV is running in ' + stats.runMode +
+         ' for ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date()) +
+         ' since ' + utils.getPrettyDate(stats.startTime) + '\n\n' +
+         'Cheers, hmsrv\n\n';
+}
 
 //
 // ensure graceful shutdown

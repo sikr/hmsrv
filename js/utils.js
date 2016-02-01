@@ -68,6 +68,7 @@ exports.getHumanReadableTimeSpan = function(time1, time2) {
   delta -= hours * 3600;
   var minutes = Math.floor(delta / 60) % 60;
   delta -= minutes * 60;
-  Math.round(seconds = delta % 60);
+  seconds = delta % 60;
+  Math.round(seconds);
   return days + ' days, ' + hours + ' hours, ' + minutes + ' minutes, ' + seconds + ' seconds';
 };

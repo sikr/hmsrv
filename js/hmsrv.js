@@ -832,12 +832,16 @@ function setupCron() {
 }
 
 function getSummary() {
-  return 'Wrote ' + countValues + ' values to table VALUES, ' +
-         countValuesFull + ' to table VALUESFULL\n\n' +
-         'This instance of HMSRV is running in ' + stats.runMode +
-         ' for ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date()) +
-         ' since ' + utils.getPrettyDate(stats.startTime) + '\n\n' +
-         'Cheers, hmsrv\n\n';
+  return 'Hi!\n\n' +
+         'This is the HMSRV summary for today:\n\n' +
+         countValues + ' values written to table VALUES\n' +
+         countValuesFull + ' values written to table VALUESFULL\n' +
+         stats.servedRequests + ' requests handled\n' +
+         Math.round(stats.servedRequestSize/1024) + ' kBytes delivered\n' +
+         'HMSRV is running in ' + stats.runMode + ' mode\n' +
+         'Uptime: ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date()) + '\n' +
+         'Starttime ' + utils.getPrettyDate(stats.startTime) + '\n\n' +
+         'Cheers, hmsrv\n';
 }
 
 //

@@ -589,6 +589,12 @@ function setupRpcClient(callback) {
     rpcClient.on('close', function() {
       rpcEventReceiverConnected = false;
       if (!stopping) {
+        if (rpcReconectCount == 10 && options.hmsrv.productive === true) {
+          mail.send('HMSRV ERROR: RPC reconnect failed 10 times!!!',
+            'Hi,\n\nthe RPC reconnect failed for 10 times now! Check this soon!\n\nCheers, HMSRV',
+            function() {
+          });
+        }
         // reconnect
         rpcReconectCount++;
         setTimeout(function() {
@@ -841,7 +847,7 @@ function getSummary() {
          'HMSRV is running in ' + stats.runMode + ' mode\n' +
          'Uptime: ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date()) + '\n' +
          'Starttime ' + utils.getPrettyDate(stats.startTime) + '\n\n' +
-         'Cheers, hmsrv\n';
+         'Cheers, HMSRV\n';
 }
 
 //

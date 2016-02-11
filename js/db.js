@@ -287,17 +287,20 @@ exports.readId = function(table, id, callback) {
   });
 };
 
-// exports.readId = function(table, id, callback) {
-//   var sql = 'SELECT * FROM ' + table.name + ' WHERE id=' + _id.toString();
-//   db.all(sql, function(err, data) {
-//     if (err) {
-//       callback({msg: 'DB: error reading from table "' + table.name + '": ' + sql});
-//     }
-//     else {
-//       callback(null, data);
-//     }
-//   });
-// };
-
+exports.readIdRaw = function(table, id, callback) {
+  var sql = 'SELECT   timestamp,' +
+            '         value ' +
+            'FROM     vals ' +
+            'WHERE    id = ' + id + ' ' +
+            'ORDER BY timestamp ASC';
+  db.all(sql, function(err, data) {
+    if (err) {
+      callback({msg: 'DB: error reading from table "' + table.name + '": ' + sql});
+    }
+    else {
+      callback(null, data);
+    }
+  });
+};
 
 })();

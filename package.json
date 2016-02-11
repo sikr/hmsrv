@@ -26,6 +26,7 @@
     "nodemailer-smtp-transport": "^1.0.4",
     "request": "^2.67.0",
     "socket.io": "^1.3.7",
+    "socket.io-client": "^1.4.5",
     "sqlite3": "^3.1.1",
     "sqlite3-transactions": "0.0.5",
     "xml2js": "^0.4.15"

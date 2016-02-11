@@ -13,7 +13,7 @@
     },
     "log": {
       "file": {
-        "name": "log/hmsrv-dev.log",
+        "name": "log/hmsrv.dev.log",
         "level": 2,
         "maxLength": -1
         },
@@ -23,6 +23,9 @@
         "colored": true
       }
     },
+    "sqlite": {
+      "filename": "db/hmsrv.dev.db"
+    },
     "mail": {
       "host": "smtp.foo.com",
       "port": 587,
@@ -30,6 +33,52 @@
       "password": "bar",
       "secure": true,
       "recipient": "bar@bar.com"
+    },
+    "graphite": {
+      "ip": "0.0.0.0",
+      "port": 2003,
+      "prefix": "dev"
+    }
+  },
+  "test" :
+  {
+    "hmsrv": {
+      "ip": "0.0.0.0",
+      "httpsPort": 2443,
+      "rpcPort": 8082,
+      "productive": false
+    },
+    "ccu": {
+      "ip": "0.0.0.0",
+      "rpcPort": 2001
+    },
+    "log": {
+      "file": {
+        "name": "log/hmsrv.test.log",
+        "level": 2,
+        "maxLength": -1
+        },
+      "console": {
+        "maxLength": 139,
+        "level": 2,
+        "colored": true
+      }
+    },
+    "sqlite": {
+      "filename": "db/hmsrv.test.db"
+    },
+    "mail": {
+      "host": "smtp.foo.com",
+      "port": 587,
+      "user": "foo@foo.com",
+      "password": "bar",
+      "secure": true,
+      "recipient": "bar@bar.com"
+    },
+    "graphite": {
+      "ip": "0.0.0.0",
+      "port": 2003,
+      "prefix": "test"
     }
   },
   "production" :
@@ -37,7 +86,7 @@
     "hmsrv": {
       "ip": "0.0.0.0",
       "httpsPort": 443,
-      "rpcPort": 8082,
+      "rpcPort": 8083,
       "productive": false
     },
     "ccu": {
@@ -56,6 +105,9 @@
         "colored": true
       }
     },
+    "sqlite": {
+      "filename": "db/hmsrv.db"
+    },
     "mail": {
       "host": "smtp.foo.com",
       "port": 587,
@@ -63,6 +115,11 @@
       "password": "bar",
       "secure": true,
       "recipient": "bar@bar.com"
+    },
+    "graphite": {
+      "ip": "0.0.0.0",
+      "port": 2003,
+      "prefix": ""
     }
   }
 }

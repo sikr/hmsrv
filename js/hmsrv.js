@@ -34,8 +34,10 @@ var log         = require('./logger.js');
 var mail        = require('./mail.js');
 var utils       = require('./utils');
 var optionsFile = require('./options.json');
+var persistence = require('../data/persistence.json');
 var options     = null;
 var CronJob     = require('cron').CronJob;
+var assert      = require('assert');
 
 //
 // SERVER
@@ -46,6 +48,7 @@ var credentials = { key: key, cert: certificate};
 var express     = require('express');
 var app         = express();
 var socketio    = require('socket.io');
+var net         = require('net');
 var webSockets  = [];
 var io;
 var https       = require('https');
@@ -156,6 +159,7 @@ var dbTables = {'values':     {'name': 'vals', 'sql': tableValues, 'data': null,
                 // 'rooms':      {'name': 'rooms', 'sql': tableRooms, 'data': null, 'clear': false}};
 var dbCacheValues = [];
 var dbCacheValuesFull = [];
+var dbFlushingPaused = false;
 var dbFlushId = 0;
 var dbFlushInterval = 60; // flush once a minute to db
 var countValues = 0;
@@ -265,6 +269,17 @@ function setupServer() {
       else if (msg === 'mail') {
         mail.send('hmsrv test mail\n\n', getSummary(), function() {
         });
+      }
+      else if (msg === 'graphite-export') {
+        if (checkGrahiteConfig()) {
+          log.info('HMSRV: starting graphite export...');
+          graphiteExport(function() {
+            pushToWebSockets({'graphite-export': {'status': 'started'}});
+          });
+        }
+        else {
+          info.warn('HMSRV: graphite export failed due to erroneous configuration');
+        }
       }
       log.debug(data);
     });
@@ -382,7 +397,8 @@ function writeRegaDataToFile(callback) {
 
   function write(fileName) {
     if (fileName) {
-      var fullPath = __dirname + '/../data/' + fileName + '.json';
+      var mode = (stats.runMode !== 'PRODUCTION')? '.' + stats.runMode.toLowerCase() : '';
+      var fullPath = __dirname + '/../data/' + fileName + mode + '.json';
       var data;
       switch (fileName) {
         case 'channels':
@@ -429,7 +445,8 @@ function loadRegaDataFromFile(callback) {
 
   function read(fileName) {
     if (fileName) {
-      var fullPath = __dirname + '/../data/' + fileName + '.json';
+      var mode = (stats.runMode !== 'PRODUCTION')? '.' + stats.runMode.toLowerCase() : '';
+      var fullPath = __dirname + '/../data/' + fileName + mode + '.json';
       fs.stat(fullPath, function(err, stats) {
         if (err) {
           // file does not exist
@@ -702,7 +719,13 @@ function setupDatabase(callback) {
 }
 
 function flushDatabase(callback) {
-  if (dbCacheValues.length > 0) {
+  if (dbFlushingPaused) {
+    log.info('DB: flushing paused');
+    if (typeof callback === 'function') {
+      callback();
+    }
+  }
+  else if (dbCacheValues.length > 0) {
     var values = dbCacheValues;
     dbCacheValues = [];
     var valuesFull = dbCacheValuesFull;
@@ -721,33 +744,167 @@ function flushDatabase(callback) {
     });
   }
   else {
+    log.info('DB: nothing to flush');
     if (typeof callback === 'function') {
-      log.info('DB: nothing to flush');
       callback();
     }
   }
 }
 
+function graphiteExport(callback) {
+  assert(typeof callback === 'function');
+
+  // flushDatabase(function() {
+    dbFlushingPaused = true;
+    var metrics = [];
+    var totalCount = 0;
+    var successCount = 0;
+    var totalChunkCount = 0;
+    var successChunkCount = 0;
+    var queue = [];
+    var graphiteExportQueue = 0;
+    var graphiteClient;
+    var graphiteSocketConnected = false;
+
+    function startExport() {
+      for (var i in persistence) {
+        if (typeof persistence[i].graphite !== undefined) {
+          metrics.push(i);
+          totalCount++;
+          // only one for first test
+          // break;
+        }
+      }
+      log.info('HMSRV: ids to export to graphite: ' + metrics.join(','));
+      read(metrics.shift());
+    }
+
+    function read(metric) {
+      if (metric) {
+        db.readIdRaw(dbTables.values, metric, function(err, data) {
+          if (!err) {
+            prepare(metric, data);
+          }
+          else {
+            // todo
+          }
+          return read(metrics.shift());
+        });
+      }
+      else {
+
+      }
+    }
+
+    function prepare(metric, data) {
+      var i;
+      var chunk = '';
+      var prefix;
+      var timestamp;
+      if (options.graphite.prefix.length > 0){
+        prefix = options.graphite.prefix + '.';
+      }
+      for (i = 0; i < data.length; i++) {
+        timestamp = Math.round((parseInt(data[i].timestamp, 10) / 1000)).toString();
+        chunk += prefix +
+                 persistence[metric].graphite.path +
+                 ' ' +
+                 data[i].value +
+                 ' ' +
+                 timestamp + '\n';
+        // send chunks of 2000 values at a time
+        if (i % 2000 === 0) {
+          queue.push(chunk);
+          chunk = '';
+          totalChunkCount++;
+        }
+      }
+      // send the last chunk
+      if (chunk.length > 0) {
+        queue.push(chunk);
+        chunk = '';
+        totalChunkCount++;
+      }
+    }
+
+    function send() {
+      if (queue.length > 0) {
+        graphiteClient.write(queue.pop());
+        successChunkCount++;
+      }
+      else {
+        log.info('HMSRV: graphite export queue currently empty');
+      }
+      finish();
+    }
+
+    function finish() {
+      log.info('HMSRV: graphite export ' + successChunkCount + '/' + totalChunkCount + ' packets sent');
+      successCount++;
+      if (successChunkCount === totalChunkCount) {
+        clearInterval(graphiteExportQueue);
+        graphiteClient.end();
+        dbFlushingPaused = false;
+        callback();
+      }
+      else {
+      }
+    }
+
+    graphiteClient = new net.Socket();
+    graphiteClient.connect(options.graphite.port, options.graphite.ip, function() {
+
+      log.info('HMSRV: connection to graphite established');
+      graphiteSocketConnected = true;
+
+      graphiteClient.on('close', function() {
+        graphiteSocketConnected = false;
+        log.info('HMSRV: connection to graphite closed');
+      });
+
+      // setup queue writer
+      graphiteExportQueue = setInterval(send, 1000);
+
+      startExport();
+    });
+}
+
 function closeDatabase(callback) {
+  if (typeof callback !== 'function') {
+    // throw
+  }
   if (dbOpened) {
     db.close(function(err) {
       if (!err) {
-        dbOpened = false;
+        dbOpened = false; 
         log.info('DB: closed successfully.');
       }
       else {
         log.warn('DB: error closing database. ' + JSON.stringify(err));
         setTimeout(closeDatabase, 5000);
       }
-      if (typeof callback === 'function') {
-        callback(err);
-      }
+      callback(err);
     });
   }
   else {
-    if (typeof callback === 'function') {
-      callback();
-    }
+    callback();
+  }
+}
+
+
+/******************************************************************************
+ *
+ * Graphite/carbon
+ *
+ */
+function checkGrahiteConfig() {
+  if (options.graphite &&
+      options.graphite.ip &&
+      options.graphite.ip !== '0.0.0.0') {
+    return true;
+  }
+  else {
+    info.warn('HMSRV: incomplete graphite config');
   }
 }
 
@@ -917,6 +1074,9 @@ function parseArgs() {
     else if (process.argv[i] == '--development') {
       stats.runMode = 'DEVELOPMENT';
     }
+    else if (process.argv[i] == '--test') {
+      stats.runMode = 'TEST';
+    }
     else {
       console.log('Error: uknown paramter ' + process.argv[2]);
       exit();
@@ -934,14 +1094,22 @@ var startTime = log.time();
 parseArgs();
 
 switch (stats.runMode) {
-  case 'PRODUCTION':
-  {
-    options = optionsFile.production;
-    break;
-  }
   case 'DEVELOPMENT':
   {
     options = optionsFile.development;
+    dbFile  = "hmsrv.dev.sqlite";
+    break;
+  }
+  case 'TEST':
+  {
+    options = optionsFile.test;
+    dbFile  = "hmsrv.dev.test.sqlite";
+    break;
+  }
+  case 'PRODUCTION':
+  {
+    options = optionsFile.production;
+    dbFile  = "hmsrv.sqlite";
     break;
   }
   default:

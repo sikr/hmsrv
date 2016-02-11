@@ -20,15 +20,22 @@ var getData = function(name, callback) {
   });
 };
 
-$('#b1').click(function result() {
+$('#shutdown').click(function result() {
   var answer = confirm('Do you reallý want to shutdown HMSRV?');
   if (answer === true) {
     socket.emit('system', '{"msg": "shutdown"}');
   }
 });
 
-$('#b2').click(function result() {
+$('#test-mail').click(function result() {
   socket.emit('system', '{"msg": "mail"}');
+});
+
+$('#graphite-export').click(function result() {
+  var answer = confirm('Do you reallý want to export to graphite?');
+  if (answer === true) {
+    socket.emit('system', '{"msg": "graphite-export"}');
+  }
 });
 
 function createTable(id, d) {

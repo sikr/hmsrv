@@ -24,7 +24,7 @@
       }
     },
     "sqlite": {
-      "filename": "db/hmsrv.dev.db"
+      "filename": "db/hmsrv.dev.sqlite"
     },
     "mail": {
       "host": "smtp.foo.com",
@@ -65,7 +65,7 @@
       }
     },
     "sqlite": {
-      "filename": "db/hmsrv.test.db"
+      "filename": "db/hmsrv.test.sqlite"
     },
     "mail": {
       "host": "smtp.foo.com",
@@ -106,7 +106,7 @@
       }
     },
     "sqlite": {
-      "filename": "db/hmsrv.db"
+      "filename": "db/hmsrv.sqlite"
     },
     "mail": {
       "host": "smtp.foo.com",

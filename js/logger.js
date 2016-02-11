@@ -41,7 +41,7 @@ var logger = {
 
   init: function(options) {
     this.options = options;
-    this.logfile = __dirname + '/../' + this.options.log.file.name;
+    this.logfile = this.options.log.file.name;
     logFile = fs.createWriteStream(this.logfile, {
         flags: "a", encoding: "utf8", mode: 0644
     });

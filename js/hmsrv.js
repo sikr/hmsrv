@@ -105,7 +105,7 @@ var dpValues = [];  // latest datapoint values to identify changes
 //
 var db       = require('./db');
 var dbDir    = directories.db;
-var dbFile   = "hmsrv.sqlite";
+var dbFile;
 var dbOpened = false;
 
 var tableValues =
@@ -1097,19 +1097,16 @@ switch (stats.runMode) {
   case 'DEVELOPMENT':
   {
     options = optionsFile.development;
-    dbFile  = "hmsrv.dev.sqlite";
     break;
   }
   case 'TEST':
   {
     options = optionsFile.test;
-    dbFile  = "hmsrv.dev.test.sqlite";
     break;
   }
   case 'PRODUCTION':
   {
     options = optionsFile.production;
-    dbFile  = "hmsrv.sqlite";
     break;
   }
   default:
@@ -1118,6 +1115,9 @@ switch (stats.runMode) {
     exit();
   }
 }
+
+dbFile  = options.sqlite.filename;
+
 log.init(options);
 log.info('Starting HMSRV in ' + stats.runMode + ' mode');
 log.info('Visit https://' + options.hmsrv.ip + ':' + options.hmsrv.httpsPort.toString());

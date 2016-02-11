@@ -13,7 +13,7 @@
     },
     "log": {
       "file": {
-        "name": "log/hmsrv.dev.log",
+        "name": "../log/hmsrv.dev.log",
         "level": 2,
         "maxLength": -1
         },
@@ -54,7 +54,7 @@
     },
     "log": {
       "file": {
-        "name": "log/hmsrv.test.log",
+        "name": "../log/hmsrv.test.log",
         "level": 2,
         "maxLength": -1
         },
@@ -95,7 +95,7 @@
     },
     "log": {
       "file": {
-        "name": "log/hmsrv-prod.log",
+        "name": "../log/hmsrv-prod.log",
         "level": 2,
         "maxLength": -1
         },

@@ -1099,44 +1099,44 @@ mail.init(options);
 
 setupServer();
 
-// setupFileSystem(function () {
-//   setupDatabase(function() {
-//     setupGraphite(function() {
-//       setupRega(function() {
-//         loadRegaData(function() {
-//           setupRpc(function() {
+setupFileSystem(function () {
+  setupDatabase(function() {
+    setupGraphite(function() {
+      setupRega(function() {
+        loadRegaData(function() {
+          setupRpc(function() {
 
-//             var dpCount = 0;
-//             // build datapoint Index name <> id
-//             for (var i in datapoints) {
-//               dpIndex[unescape(datapoints[i].Name)] = i;
-//               dpCount++;
-//             }
-//             for (i in dpIndex) {
-//               log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
-//             }
-//             log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
+            var dpCount = 0;
+            // build datapoint Index name <> id
+            for (var i in datapoints) {
+              dpIndex[unescape(datapoints[i].Name)] = i;
+              dpCount++;
+            }
+            for (i in dpIndex) {
+              log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
+            }
+            log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
 
-//             var dbFlushId = setInterval(function() {
-//               flushDatabase();
-//             }, dbFlushInterval * 1000);
+            var dbFlushId = setInterval(function() {
+              flushDatabase();
+            }, dbFlushInterval * 1000);
 
-//             setupCron();
+            setupCron();
 
-//             log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
+            log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
 
-//             // // prevent node app from running as root permanently
-//             // var uid = parseInt(process.env.SUDO_UID);
-//             // // Set our server's uid to that user
-//             // if (uid){
-//             //   process.setuid(uid);
-//             // }
-//             // log.info('Server\'s UID is now ' + process.getuid());
-//           });
-//         });
-//       });
-//     });
-//   });
-// });
+            // // prevent node app from running as root permanently
+            // var uid = parseInt(process.env.SUDO_UID);
+            // // Set our server's uid to that user
+            // if (uid){
+            //   process.setuid(uid);
+            // }
+            // log.info('Server\'s UID is now ' + process.getuid());
+          });
+        });
+      });
+    });
+  });
+});
 
 })();

@@ -737,14 +737,14 @@ function flushDatabase(callback) {
     var graphiteValues = graphiteCacheValuesFull;
     graphiteCacheValuesFull = [];
 
-    db.insertValues(dbTables.values, values, function(count) {
-      log.info('DB: flushed ' + count + ' values into table VALUES');
+    db.insertValues(dbTables.values, values, function() {
+      log.info('DB: flushed ' + values.length + ' values into table VALUES');
       countValues += count;
-      db.insertValues(dbTables.valuesFull, valuesFull, function(count) {
-        log.info('DB: flushed ' + count + ' values into table VALUESFULL');
+      db.insertValues(dbTables.valuesFull, valuesFull, function() {
+        log.info('DB: flushed ' + valuesFull.length + ' values into table VALUESFULL');
         countValuesFull += count;
         graphite.send(graphiteValues, function() {
-          log.info('GRAPHITE: flushed ' + graphiteValues.count + ' values to Graphite');
+          log.info('GRAPHITE: flushed ' + graphiteValues.length + ' values to Graphite');
           if (typeof callback === 'function') {
             callback();
           }

@@ -40,11 +40,15 @@ var GraphiteClient = function(options) {
           // kernel write buffer free (again)
           that.drained = true;
         });
-        callback();
+        if (typeof callback === 'function') {
+          callback();
+        }
       });
     }
     else {
-      callback({msg: 'GraphiteClient is already connected'});
+      if (typeof callback === 'function') {
+        callback({msg: 'GraphiteClient is already connected'});
+      }
     }
   };
 
@@ -55,10 +59,14 @@ var GraphiteClient = function(options) {
   this.send = function(data, callback) {
     if (that.connected === true) {
       that.socket.write(data.join('\n'));
-      callback();
+      if (typeof callback === 'function') {
+        callback();
+      }
     }
     else {
-      callback({msg: 'Not connected to graphite.'});
+      if (typeof callback === 'function') {
+        callback({msg: 'Not connected to graphite.'});
+      }
     }
   };
   //
@@ -102,7 +110,9 @@ var GraphiteClient = function(options) {
         }
       }
       else {
-        callback({msg: 'Not connected to graphite.'});
+        if (typeof callback === 'function') {
+          callback({msg: 'Not connected to graphite.'});
+        }
       }
     }
     

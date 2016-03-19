@@ -290,9 +290,10 @@ exports.readId = function(table, id, callback) {
 exports.readIdRaw = function(table, id, callback) {
   var sql = 'SELECT   timestamp,' +
             '         value ' +
-            'FROM     vals ' +
+            'FROM     ' + table.name + ' ' +
             'WHERE    id = ' + id + ' ' +
             'ORDER BY timestamp ASC';
+            // 'LIMIT    100';
   db.all(sql, function(err, data) {
     if (err) {
       callback({msg: 'DB: error reading from table "' + table.name + '": ' + sql});

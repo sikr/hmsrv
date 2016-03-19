@@ -97,8 +97,8 @@ var devices;
 var channels;
 var datapoints;
 var rooms;
-var dpIndex  = {};  // index of homematic adress > homeatic id
-var dpValues = [];  // latest datapoint values to identify changes
+var dpIndex  = {}; // index of homematic adress > homeatic id
+var dpValues = []; // latest datapoint values to identify changes
 
 //
 // DB
@@ -164,6 +164,10 @@ var dbFlushId = 0;
 var dbFlushInterval = 60; // flush once a minute to db
 var countValues = 0;
 var countValuesFull = 0;
+
+var Graphite = require('./graphite.js');
+var graphite;
+var graphiteCacheValuesFull = [];
 
 var stopping = false;
 var shutdownCount = 0;
@@ -273,8 +277,8 @@ function setupServer() {
       else if (msg === 'graphite-export') {
         if (checkGrahiteConfig()) {
           log.info('HMSRV: starting graphite export...');
-          graphiteExport(function() {
-            pushToWebSockets({'graphite-export': {'status': 'started'}});
+          graphiteExport(function(result) {
+            pushToWebSockets({'graphite-export': result});
           });
         }
         else {
@@ -725,11 +729,13 @@ function flushDatabase(callback) {
       callback();
     }
   }
-  else if (dbCacheValues.length > 0) {
+  else if (dbCacheValuesFull.length > 0) {
     var values = dbCacheValues;
     dbCacheValues = [];
     var valuesFull = dbCacheValuesFull;
     dbCacheValuesFull = [];
+    var graphiteValues = graphiteCacheValuesFull;
+    graphiteCacheValuesFull = [];
 
     db.insertValues(dbTables.values, values, function(count) {
       log.info('DB: flushed ' + count + ' values into table VALUES');
@@ -737,9 +743,12 @@ function flushDatabase(callback) {
       db.insertValues(dbTables.valuesFull, valuesFull, function(count) {
         log.info('DB: flushed ' + count + ' values into table VALUESFULL');
         countValuesFull += count;
-        if (typeof callback === 'function') {
-          callback();
-        }
+        graphite.send(graphiteValues, function() {
+          log.info('GRAPHITE: flushed ' + graphiteValues.count + ' values to Graphite');
+          if (typeof callback === 'function') {
+            callback();
+          }
+        });
       });
     });
   }
@@ -751,122 +760,72 @@ function flushDatabase(callback) {
   }
 }
 
+/******************************************************************************
+ *
+ * Graphite
+ *
+ */
+function setupGraphite(callback) {
+  if (checkGrahiteConfig()) {
+    var _options = {
+      ip: options.graphite.ip,
+      port: options.graphite.port,
+      prefix: options.graphite.prefix
+    };
+    graphite = new Graphite(_options);
+
+    graphite.connect(function(err) {
+      callback(err);
+    });
+  }
+  else {
+    log.warn('Incomplete Graphite config');
+  }
+}
+
 function graphiteExport(callback) {
   assert(typeof callback === 'function');
+  dbFlushingPaused = true;
+  var metrics = [];
+  var totalCount = 0;
 
-  // flushDatabase(function() {
-    dbFlushingPaused = true;
-    var metrics = [];
-    var totalCount = 0;
-    var successCount = 0;
-    var totalChunkCount = 0;
-    var successChunkCount = 0;
-    var queue = [];
-    var graphiteExportQueue = 0;
-    var graphiteClient;
-    var graphiteSocketConnected = false;
+  function startExport() {
+    for (var i in persistence) {
+      if (typeof persistence[i].graphite !== undefined) {
+        metrics.push(i);
+        totalCount++;
+      }
+    }
+    log.info('HMSRV: ids to export to graphite: ' + metrics.join(','));
+    _export(metrics.shift());
+  }
 
-    function startExport() {
-      for (var i in persistence) {
-        if (typeof persistence[i].graphite !== undefined) {
-          metrics.push(i);
-          totalCount++;
-          // only one for first test
-          // break;
+  function _export(metric) {
+    if (metric) {
+      db.readIdRaw(dbTables.valuesFull, metric, function(err, data) {
+        if (!err) {
+          log.info('HMSRV: sending blob for datapoint ' + persistence[metric].graphite.path + ' with ' + data.length + ' entries to graphite');
+          graphite.sendBlob(persistence[metric].graphite.path, data, function(err) {
+            if (!err) {
+              _export(metrics.shift());
+            }
+            else {
+              callback(err);
+            }
+          });
         }
-      }
-      log.info('HMSRV: ids to export to graphite: ' + metrics.join(','));
-      read(metrics.shift());
-    }
-
-    function read(metric) {
-      if (metric) {
-        db.readIdRaw(dbTables.values, metric, function(err, data) {
-          if (!err) {
-            prepare(metric, data);
-          }
-          else {
-            // todo
-          }
-          return read(metrics.shift());
-        });
-      }
-      else {
-
-      }
-    }
-
-    function prepare(metric, data) {
-      var i;
-      var chunk = '';
-      var prefix;
-      var timestamp;
-      if (options.graphite.prefix.length > 0){
-        prefix = options.graphite.prefix + '.';
-      }
-      for (i = 0; i < data.length; i++) {
-        timestamp = Math.round((parseInt(data[i].timestamp, 10) / 1000)).toString();
-        chunk += prefix +
-                 persistence[metric].graphite.path +
-                 ' ' +
-                 data[i].value +
-                 ' ' +
-                 timestamp + '\n';
-        // send chunks of 2000 values at a time
-        if (i % 2000 === 0) {
-          queue.push(chunk);
-          chunk = '';
-          totalChunkCount++;
+        else {
+          log.error('HMSRV: error reading datapoint ' + persistence[metric].graphite.path);
         }
-      }
-      // send the last chunk
-      if (chunk.length > 0) {
-        queue.push(chunk);
-        chunk = '';
-        totalChunkCount++;
-      }
-    }
-
-    function send() {
-      if (queue.length > 0) {
-        graphiteClient.write(queue.pop());
-        successChunkCount++;
-      }
-      else {
-        log.info('HMSRV: graphite export queue currently empty');
-      }
-      finish();
-    }
-
-    function finish() {
-      log.info('HMSRV: graphite export ' + successChunkCount + '/' + totalChunkCount + ' packets sent');
-      successCount++;
-      if (successChunkCount === totalChunkCount) {
-        clearInterval(graphiteExportQueue);
-        graphiteClient.end();
-        dbFlushingPaused = false;
-        callback();
-      }
-      else {
-      }
-    }
-
-    graphiteClient = new net.Socket();
-    graphiteClient.connect(options.graphite.port, options.graphite.ip, function() {
-
-      log.info('HMSRV: connection to graphite established');
-      graphiteSocketConnected = true;
-
-      graphiteClient.on('close', function() {
-        graphiteSocketConnected = false;
-        log.info('HMSRV: connection to graphite closed');
       });
-
-      // setup queue writer
-      graphiteExportQueue = setInterval(send, 1000);
-
-      startExport();
-    });
+    }
+    else {
+      log.info('HMSRV: export to Graphite finished');
+      dbFlushingPaused = false;
+      callback();
+    }
+  }
+  startExport();
 }
 
 function closeDatabase(callback) {
@@ -900,7 +859,7 @@ function closeDatabase(callback) {
 function checkGrahiteConfig() {
   if (options.graphite &&
       options.graphite.ip &&
-      options.graphite.ip !== '0.0.0.0') {
+      options.graphite.port !== '0.0.0.0') {
     return true;
   }
   else {
@@ -968,6 +927,13 @@ function logEvent(event) {
         log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
         pushToWebSockets('update', {status: status, id: id, address: address, name: name, value: value});
         dbCacheValuesFull.push({timestamp: timestamp, id: id, value: value});
+        if (persistence[id] && persistence[id].graphite) {
+          graphiteCacheValuesFull.push(
+            persistence[id].graphite.path + ' ' +
+            value + ' ' +
+            Math.round((parseInt(timestamp, 10) / 1000)).toString()
+          );
+        }
       }
       else {
         log.verbose('HMSRV: <unknown> ' + address + ', ' + name + ', ' + value);
@@ -1127,36 +1093,38 @@ setupServer();
 
 setupFileSystem(function () {
   setupDatabase(function() {
-    setupRega(function() {
-      loadRegaData(function() {
-        setupRpc(function() {
+    setupGraphite(function() {
+      setupRega(function() {
+        loadRegaData(function() {
+          setupRpc(function() {
 
-          var dpCount = 0;
-          // build datapoint Index name <> id
-          for (var i in datapoints) {
-            dpIndex[unescape(datapoints[i].Name)] = i;
-            dpCount++;
-          }
-          for (i in dpIndex) {
-            log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
-          }
-          log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
+            var dpCount = 0;
+            // build datapoint Index name <> id
+            for (var i in datapoints) {
+              dpIndex[unescape(datapoints[i].Name)] = i;
+              dpCount++;
+            }
+            for (i in dpIndex) {
+              log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
+            }
+            log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
 
-          var dbFlushId = setInterval(function() {
-            flushDatabase();
-          }, dbFlushInterval * 1000);
+            var dbFlushId = setInterval(function() {
+              flushDatabase();
+            }, dbFlushInterval * 1000);
 
-          setupCron();
+            setupCron();
 
-          log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
+            log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
 
-          // // prevent node app from running as root permanently
-          // var uid = parseInt(process.env.SUDO_UID);
-          // // Set our server's uid to that user
-          // if (uid){
-          //   process.setuid(uid);
-          // }
-          // log.info('Server\'s UID is now ' + process.getuid());
+            // // prevent node app from running as root permanently
+            // var uid = parseInt(process.env.SUDO_UID);
+            // // Set our server's uid to that user
+            // if (uid){
+            //   process.setuid(uid);
+            // }
+            // log.info('Server\'s UID is now ' + process.getuid());
+          });
         });
       });
     });

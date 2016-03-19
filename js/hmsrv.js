@@ -936,11 +936,11 @@ function logEvent(event) {
         pushToWebSockets('update', {status: status, id: id, address: address, name: name, value: value});
         dbCacheValuesFull.push({timestamp: timestamp, id: id, value: value});
         if (persistence[id] && persistence[id].graphite) {
-          graphiteCacheValuesFull.push(
-            persistence[id].graphite.path + ' ' +
-            value + ' ' +
-            Math.round((parseInt(timestamp, 10) / 1000)).toString()
-          );
+          graphiteCacheValuesFull.push({
+            path: persistence[id].graphite.path,
+            value: value,
+            timestamp: timestamp
+          });
         }
       }
       else {

@@ -57,8 +57,30 @@ var GraphiteClient = function(options) {
   };
 
   this.send = function(data, callback) {
+    var row;
+    var prefix;
+    var timestamp;
+    var preparedData = [];
     if (that.connected === true) {
-      that.socket.write(data.join('\n'));
+
+      // prepare data
+      if (that.prefix.length > 0) {
+        prefix = that.prefix + '.';
+      }
+
+      for (var i = 0; i < data.length; i++) {
+        timestamp = Math.round((parseInt(data[i].timestamp, 10) / 1000)).toString();
+        row = prefix +
+              data[i].path +
+              ' ' +
+              data[i].value +
+              ' ' +
+              timestamp + '\n';
+        preparedData.push(row);
+      }
+
+      that.socket.write(preparedData.join('\n'));
+
       if (typeof callback === 'function') {
         callback();
       }
@@ -134,7 +156,7 @@ var GraphiteClient = function(options) {
     _startQueue();
 
     // prepare data
-    if (that.prefix.length > 0){
+    if (that.prefix.length > 0) {
       prefix = that.prefix + '.';
     }
     for (i = 0; i < data.length; i++) {

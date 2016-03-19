@@ -38,6 +38,7 @@ var persistence = require('../data/persistence.json');
 var options     = null;
 var CronJob     = require('cron').CronJob;
 var assert      = require('assert');
+var os          = require('os');
 
 //
 // SERVER
@@ -57,7 +58,8 @@ var stats       = {
   startTime: new Date(),
   runMode: 'DEVELOPMENT',
   servedRequests: 0,
-  servedRequestSize: 0
+  servedRequestSize: 0,
+  hostname: os.hostname()
 };
 
 //
@@ -93,12 +95,12 @@ var directories = {
 //
 // Homematic data
 //
-var devices;
-var channels;
-var datapoints;
-var rooms;
-var dpIndex  = {}; // index of homematic adress > homeatic id
-var dpValues = []; // latest datapoint values to identify changes
+var devices    = {};
+var channels   = {};
+var datapoints = {};
+var rooms      = {};
+var dpIndex    = {}; // index of homematic adress > homeatic id
+var dpValues   = []; // latest datapoint values to identify changes
 
 //
 // DB
@@ -180,6 +182,8 @@ var shutdownCount = 0;
  */
 function setupServer() {
 
+  var response = '';
+
   // static content webserver
   app.use('/', express.static('../www/'));
 
@@ -190,67 +194,71 @@ function setupServer() {
     next();
   });
 
-  app.get('/devices', function (req, res) {
-    res.header("Access-Control-Allow-Origin", "*");
-    var responseData = JSON.stringify(devices);
-    stats.servedRequestSize += responseData.length;
-    res.send(responseData);
-  });
+  app.get('/devices', function (req, res, next) {
+    response = devices;
+    next();
+  }, sendResponse);
 
-  app.get('/channels', function (req, res) {
-    res.header("Access-Control-Allow-Origin", "*");
-    var responseData = JSON.stringify(channels);
-    stats.servedRequestSize += responseData.length;
-    res.send(responseData);
-  });
+  app.get('/channels', function (req, res, next) {
+    response = channels;
+    next();
+  }, sendResponse);
 
-  app.get('/datapoints', function (req, res) {
-    res.header("Access-Control-Allow-Origin", "*");
-    var responseData = JSON.stringify(datapoints);
-    stats.servedRequestSize += responseData.length;
-    res.send(responseData);
-  });
+  app.get('/datapoints', function (req, res, next) {
+    response = datapoints;
+    next();
+  }, sendResponse);
 
-  app.get('/rooms', function (req, res) {
-    res.header("Access-Control-Allow-Origin", "*");
-    var responseData = JSON.stringify(rooms);
-    stats.servedRequestSize += responseData.length;
-    res.send(responseData);
-  });
+  app.get('/rooms', function (req, res, next) {
+    response = rooms;
+    next();
+  }, sendResponse);
 
-  app.get('/values', function (req, res) {
-    res.header("Access-Control-Allow-Origin", "*");
+  app.get('/values', function (req, res, next) {
     var id = parseInt(req.query.id, 10);
     if (!isNaN(id)) {
       db.readId(dbTables.values, id, function(err, data) {
-        var responseData;
         if (!err) {
-          responseData = JSON.stringify(data);
-          stats.servedRequestSize += responseData.length;
-          res.send(responseData);
+          response = data;
         }
         else {
-          responseData = {'msg': 'error reading database'};
-          stats.servedRequestSize += responseData.length;
-          res.send(responseData);
+          response = {'msg': 'error reading database'};
         }
       });
     }
-  });
+    next();
+  }, sendResponse);
 
-  app.get('/value', function (req, res) {
-    res.header("Access-Control-Allow-Origin", "*");
+  app.get('/value', function (req, res, next) {
     var id = parseInt(req.query.id, 10);
     if (!isNaN(id)) {
       if (dpValues[id] !== undefined) {
-        var result = {id: id, timestamp: dpValues[id].timstamp, value: dpValues[id].value};
-        res.send(JSON.stringify(result));
+        response = {
+          id: id,
+          timestamp: dpValues[id].timstamp,
+          value: dpValues[id].value
+        };
       }
       else {
-        res.send('{"msg": "not available"}');
+        response = {"msg": "not available"};
       }
     }
-  });
+    next();
+  }, sendResponse);
+
+  app.get('/stats', function (req, res, next) {
+    response = {stats: stats};
+    next();
+  }, sendResponse);
+
+  function sendResponse(req, res) {
+    res.header("Access-Control-Allow-Origin", "*");
+    if (typeof response === 'object') {
+      response = JSON.stringify(response);
+    }
+    stats.servedRequestSize += response.length;
+    res.send(response);
+  }
 
   // create secure server 
   var port = options.hmsrv.httpsPort || 443;
@@ -739,10 +747,10 @@ function flushDatabase(callback) {
 
     db.insertValues(dbTables.values, values, function() {
       log.info('DB: flushed ' + values.length + ' values into table VALUES');
-      countValues += count;
+      countValues += values.length;
       db.insertValues(dbTables.valuesFull, valuesFull, function() {
         log.info('DB: flushed ' + valuesFull.length + ' values into table VALUESFULL');
-        countValuesFull += count;
+        countValuesFull += valuesFull.length;
         graphite.send(graphiteValues, function() {
           log.info('GRAPHITE: flushed ' + graphiteValues.length + ' values to Graphite');
           if (typeof callback === 'function') {
@@ -1091,44 +1099,44 @@ mail.init(options);
 
 setupServer();
 
-setupFileSystem(function () {
-  setupDatabase(function() {
-    setupGraphite(function() {
-      setupRega(function() {
-        loadRegaData(function() {
-          setupRpc(function() {
+// setupFileSystem(function () {
+//   setupDatabase(function() {
+//     setupGraphite(function() {
+//       setupRega(function() {
+//         loadRegaData(function() {
+//           setupRpc(function() {
 
-            var dpCount = 0;
-            // build datapoint Index name <> id
-            for (var i in datapoints) {
-              dpIndex[unescape(datapoints[i].Name)] = i;
-              dpCount++;
-            }
-            for (i in dpIndex) {
-              log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
-            }
-            log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
+//             var dpCount = 0;
+//             // build datapoint Index name <> id
+//             for (var i in datapoints) {
+//               dpIndex[unescape(datapoints[i].Name)] = i;
+//               dpCount++;
+//             }
+//             for (i in dpIndex) {
+//               log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
+//             }
+//             log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
 
-            var dbFlushId = setInterval(function() {
-              flushDatabase();
-            }, dbFlushInterval * 1000);
+//             var dbFlushId = setInterval(function() {
+//               flushDatabase();
+//             }, dbFlushInterval * 1000);
 
-            setupCron();
+//             setupCron();
 
-            log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
+//             log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
 
-            // // prevent node app from running as root permanently
-            // var uid = parseInt(process.env.SUDO_UID);
-            // // Set our server's uid to that user
-            // if (uid){
-            //   process.setuid(uid);
-            // }
-            // log.info('Server\'s UID is now ' + process.getuid());
-          });
-        });
-      });
-    });
-  });
-});
+//             // // prevent node app from running as root permanently
+//             // var uid = parseInt(process.env.SUDO_UID);
+//             // // Set our server's uid to that user
+//             // if (uid){
+//             //   process.setuid(uid);
+//             // }
+//             // log.info('Server\'s UID is now ' + process.getuid());
+//           });
+//         });
+//       });
+//     });
+//   });
+// });
 
 })();

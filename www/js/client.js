@@ -13,7 +13,7 @@ socket.on('update', function (data) {
 });
 
 var getData = function(name, callback) {
-  $.getJSON(location.href + name, {}, function cb(result) {
+  $.getJSON(location.origin + '/' + name, {}, function cb(result) {
     if (callback) {
       callback(result);
     }
@@ -93,14 +93,18 @@ function loadData() {
 
   function get(table) {
     if (table) {
-      getData(table, function(d) {
-        createTable(table, d);
+      getData(table, function(data) {
+        createTable(table, data);
         $('#' + table).DataTable();
       });
       return get(tables.shift());
     }
   }
   get(tables.shift());
+  getData('stats', function(data) {
+    var serverName = 'Hmsrv' + '@' + data.stats.hostname + ' - ' + data.stats.runMode.toLowerCase();
+    $('#server').html(serverName);
+  });
 }
 loadData();
 

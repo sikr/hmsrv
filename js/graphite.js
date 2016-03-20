@@ -58,7 +58,7 @@ var GraphiteClient = function(options) {
 
   this.send = function(data, callback) {
     var row;
-    var prefix;
+    var prefix = '';
     var timestamp;
     var preparedData = [];
     if (that.connected === true) {
@@ -102,7 +102,7 @@ var GraphiteClient = function(options) {
     var i;
     var chunk = '';
     var row = '';
-    var prefix;
+    var prefix = '';
     var timestamp;
 
     function _startQueue() {

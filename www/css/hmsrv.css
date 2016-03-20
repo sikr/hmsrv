@@ -1,8 +1,3 @@
-body {
-  font-family: Verdana, Geneva, sans-serif;
-  font-size: 0.75em;
-}
-
 table {
   border: 1px solid #ccc;
   border-collapse: collapse;
@@ -35,3 +30,21 @@ th {
   background-color: #efefef;
 }
 
+/*
+ * Bootstrap overrides
+ */
+
+.navbar-default .navbar-development {
+  color: #06799f;
+  font-weight: bold;
+}
+
+.navbar-default .navbar-production {
+  color: #a61a00;
+  font-weight: bold;
+}
+
+.navbar-default .navbar-test {
+  color: #007929;
+  font-weight: bold;
+}

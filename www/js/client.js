@@ -104,6 +104,7 @@ function loadData() {
   getData('stats', function(data) {
     var serverName = 'Hmsrv' + '@' + data.stats.hostname + ' - ' + data.stats.runMode.toLowerCase();
     $('#server').html(serverName);
+    $('#server').addClass('navbar-' + data.stats.runMode.toLowerCase());
   });
 }
 loadData();

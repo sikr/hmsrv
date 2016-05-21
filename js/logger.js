@@ -45,7 +45,7 @@ var logger = {
     logFile = fs.createWriteStream(this.logfile, {
         flags: "a", encoding: "utf8", mode: 0644
     });
-    initialized = true;
+    this.initialized = true;
   },
   debug: function(message) {
     this.log(0, message);
@@ -92,28 +92,33 @@ var logger = {
       msg = message.replace(/(\r\n|\n|\r)/gm,"");
     }
 
-    if (this.options.log.file && level >= this.options.log.file.level) {
-      msgFile = utils.getPrettyDate();
-      msgFile += ' ' + this.type[level];
-      msgFile += msg;
-
-      if (this.options.log.file.maxLength != -1 &&
-          msgFile.length > this.options.log.file.maxLength) {
-        msgFile = msgFile.slice(0, this.options.log.file.maxLength - 4) + " ...";
-      }
-      logFile.write(msgFile + '\n');
+    if (!this.initialized) {
+      console.error('Logger is not yet initialized');
     }
+    else {
+      if (this.options.log.file && level >= this.options.log.file.level) {
+        msgFile = utils.getPrettyDate();
+        msgFile += ' ' + this.type[level];
+        msgFile += msg;
 
-    if (this.options.log.console  && level >= this.options.log.console.level) {
-      msgConsole = utils.getPrettyDate();
-      msgConsole += ' ' + this.type[level];
-      msgConsole += msg;
-
-      if (this.options.log.console.maxLength != -1 &&
-          msgConsole.length > this.options.log.console.maxLength) {
-        msgConsole = msgConsole.slice(0, this.options.log.console.maxLength - 4) + " ...";
+        if (this.options.log.file.maxLength != -1 &&
+            msgFile.length > this.options.log.file.maxLength) {
+          msgFile = msgFile.slice(0, this.options.log.file.maxLength - 4) + " ...";
+        }
+        logFile.write(msgFile + '\n');
       }
-      console.log(msgConsole);
+
+      if (this.options.log.console  && level >= this.options.log.console.level) {
+        msgConsole = utils.getPrettyDate();
+        msgConsole += ' ' + this.type[level];
+        msgConsole += msg;
+
+        if (this.options.log.console.maxLength != -1 &&
+            msgConsole.length > this.options.log.console.maxLength) {
+          msgConsole = msgConsole.slice(0, this.options.log.console.maxLength - 4) + " ...";
+        }
+        console.log(msgConsole);
+      }
     }
   }
 };

@@ -1,5 +1,8 @@
 /*
- * SCSW - Skeleton of a secure (https) client with websocket
+ * HMSRV
+ *
+ * Receive and send data from Homematic CCU, store data in sqlite3 db and
+ * make data accessible via XHR/Websocket for web applications.
  */
 $(function() {
 
@@ -107,6 +110,6 @@ function loadData() {
     $('#server').addClass('navbar-' + data.stats.runMode.toLowerCase());
   });
 }
-loadData();
+// loadData();
 
 });

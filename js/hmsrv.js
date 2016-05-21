@@ -933,7 +933,7 @@ function logEvent(event) {
           dbCacheValues.push({timestamp: timestamp, id: id, value: value});
         }
         log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
-        pushToWebSockets('update', {status: status, id: id, address: address, name: name, value: value});
+        pushToWebSockets('update', {timestamp: timestamp, status: status, id: id, address: address, name: name, value: value});
         dbCacheValuesFull.push({timestamp: timestamp, id: id, value: value});
         if (persistence[id] && persistence[id].graphite) {
           graphiteCacheValuesFull.push({
@@ -1053,7 +1053,7 @@ function parseArgs() {
     }
     else {
       console.log('Error: uknown paramter ' + process.argv[2]);
-      exit();
+      process.exit(1);
     }
   }
 }
@@ -1085,9 +1085,13 @@ switch (stats.runMode) {
   }
   default:
   {
-    log.error('HMSRV: unknown run mode');
+    console.error('HMSRV: unknown run mode');
     exit();
   }
+}
+if (options === undefined) {
+  console.error('File options.json doesn\'t contain configuration for runmode "' + stats.runMode + '"');
+  process.exit(1);
 }
 
 dbFile  = options.sqlite.filename;

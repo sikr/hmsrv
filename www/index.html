@@ -6,64 +6,37 @@
     <meta name="description" content="" />
     <meta name="viewport" content="width=device-width" />
 
-    <link rel="stylesheet" type="text/css" href="components/datatables/media/css/jquery.dataTables.css" />
+    <!-- <link rel="stylesheet" type="text/css" href="components/datatables/media/css/jquery.dataTables.css" /> -->
     <link rel="stylesheet" type="text/css" href="components/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" type="text/css" href="css/hmsrv.css" />
   </head>
-  <body>
+  <body ng-app="hmsrvApp">
     <!-- Fixed navbar -->
-    <nav class="navbar navbar-default navbar-static-top">
+    <nav class="navbar navbar-default navbar-static-top" ng-controller="projectName">
       <div class="container">
         <div class="navbar-header">
-          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-          </button>
-          <a id="server" class="navbar-brand" href="#">Project name</a>
+          <a id="server" class="navbar-brand {{class}}">{{ projectName }}</a>
         </div>
         <div id="navbar" class="navbar-collapse collapse">
           <ul class="nav navbar-nav">
-            <li class="active"><a href="#">Home</a></li>
-            <li><a href="#about">About</a></li>
-            <li><a href="#contact">Contact</a></li>
-            <li class="dropdown">
-              <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Dropdown <span class="caret"></span></a>
-              <ul class="dropdown-menu">
-                <li><a href="#">Action</a></li>
-                <li><a href="#">Another action</a></li>
-                <li><a href="#">Something else here</a></li>
-                <li role="separator" class="divider"></li>
-                <li class="dropdown-header">Nav header</li>
-                <li><a href="#">Separated link</a></li>
-                <li><a href="#">One more separated link</a></li>
-              </ul>
-            </li>
+            <li class="{{homeClass}}"><a href="#/home">Home</a></li>
+            <li class="{{dataClass}}"><a href="#/data">Data</a></li>
+            <li class="{{graphsClass}}"><a href="#/graphs">Graphs</a></li>
+            <li class="{{administrationClass}}"><a href="#/administration">Administration</a></li>
           </ul>
-<!--
-          <ul class="nav navbar-nav navbar-right">
-            <li><a href="../navbar/">Default</a></li>
-            <li><a href="../navbar-static-top/">Static top</a></li>
-            <li class="active"><a href="./">Fixed top <span class="sr-only">(current)</span></a></li>
-          </ul>
--->
-        </div><!--/.nav-collapse -->
+        </div>
       </div>
     </nav>
-
     <div class="container">
-      <button id="shutdown">shutdown!</button>
-      <button id="test-mail">mail!</button>
-      <button id="graphite-export">graphite export</button>
+      <ng-view></ng-view>
     </div>
-
     <!-- scripts -->
     <script src="components/jquery/dist/jquery.js"></script>
     <script src="components/datatables/media/js/jquery.dataTables.js"></script>
+    <script src="components/angular/angular.js"></script>
+    <script src="components/angular-route/angular-route.js"></script>
     <script src="components/bootstrap/dist/js/bootstrap.min.js"></script>
     <script src="components/socket.io-client/socket.io.js"></script>
-    <script src="js/client.js"></script>
-
+    <script src="js/index.js"></script>
   </body>
 </html>

@@ -697,7 +697,7 @@ function closeRpc(callback) {
  *
  */
 function setupDatabase(callback) {
-  log.info('DB: Initialize Database');
+  log.info('DB: Initialize Database - ' + dbDir + '/' + dbFile);
   db.open(dbDir + '/' + dbFile, function() {
     dbOpened = true;
     log.info('DB: opened successfully.');

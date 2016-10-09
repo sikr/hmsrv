@@ -79,7 +79,7 @@ var GraphiteClient = function(options) {
         preparedData.push(row);
       }
 
-      that.socket.write(preparedData.join('\n'));
+      that.socket.write(preparedData.join());
 
       if (typeof callback === 'function') {
         callback();

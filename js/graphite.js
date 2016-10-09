@@ -78,8 +78,7 @@ var GraphiteClient = function(options) {
               timestamp + '\n';
         preparedData.push(row);
       }
-
-      that.socket.write(preparedData.join());
+      that.socket.write(preparedData.join(''));
 
       if (typeof callback === 'function') {
         callback();

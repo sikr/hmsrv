@@ -37,6 +37,7 @@ var optionsFile = require('./options.json');
 var persistence = require('../data/persistence.json');
 var options     = null;
 var CronJob     = require('cron').CronJob;
+var summaryJob  = null;
 var assert      = require('assert');
 var os          = require('os');
 
@@ -283,7 +284,7 @@ function setupServer() {
         });
       }
       else if (msg === 'graphite-export') {
-        if (checkGrahiteConfig()) {
+        if (checkGraphiteConfig()) {
           log.info('HMSRV: starting graphite export...');
           graphiteExport(function(result) {
             pushToWebSockets({'graphite-export': result});
@@ -742,23 +743,15 @@ function flushDatabase(callback) {
     dbCacheValues = [];
     var valuesFull = dbCacheValuesFull;
     dbCacheValuesFull = [];
-    var graphiteValues = graphiteCacheValuesFull;
-    graphiteCacheValuesFull = [];
 
-    db.insertValues(dbTables.values, values, function() {
-      log.info('DB: flushed ' + values.length + ' values into table VALUES');
-      countValues += values.length;
-      db.insertValues(dbTables.valuesFull, valuesFull, function() {
-        log.info('DB: flushed ' + valuesFull.length + ' values into table VALUESFULL');
-        countValuesFull += valuesFull.length;
-        graphite.send(graphiteValues, function() {
-          log.info('GRAPHITE: flushed ' + graphiteValues.length + ' values to Graphite');
-          if (typeof callback === 'function') {
-            callback();
-          }
-        });
-      });
-    });
+    // db.insertValues(dbTables.values, values, function() {
+    //   log.info('DB: ' + values.length + ' flushed');
+    //   countValues += values.length;
+    //   db.insertValues(dbTables.valuesFull, valuesFull, function() {
+    //     log.info('DB: ' + valuesFull.length + ' flushed (full)');
+    //     countValuesFull += valuesFull.length;
+    //   });
+    // });
   }
   else {
     log.info('DB: nothing to flush');
@@ -768,13 +761,36 @@ function flushDatabase(callback) {
   }
 }
 
+function closeDatabase(callback) {
+  if (typeof callback !== 'function') {
+    // throw
+  }
+  if (dbOpened) {
+    db.close(function(err) {
+      if (!err) {
+        dbOpened = false; 
+        log.info('DB: closed successfully.');
+      }
+      else {
+        log.warn('DB: error closing database. ' + JSON.stringify(err));
+        setTimeout(closeDatabase, 5000);
+      }
+      callback(err);
+    });
+  }
+  else {
+    callback();
+  }
+}
+
+
 /******************************************************************************
  *
  * Graphite
  *
  */
 function setupGraphite(callback) {
-  if (checkGrahiteConfig()) {
+  if (checkGraphiteConfig()) {
     var _options = {
       ip: options.graphite.ip,
       port: options.graphite.port,
@@ -789,7 +805,18 @@ function setupGraphite(callback) {
   else {
     log.warn('Incomplete Graphite config');
   }
-}
+} // setupGraphite()
+
+function checkGraphiteConfig() {
+  if (options.graphite &&
+      options.graphite.ip &&
+      options.graphite.port !== '0.0.0.0') {
+    return true;
+  }
+  else {
+    info.warn('HMSRV: incomplete graphite config');
+  }
+} // checkGraphiteConfig
 
 function graphiteExport(callback) {
   assert(typeof callback === 'function');
@@ -834,46 +861,28 @@ function graphiteExport(callback) {
     }
   }
   startExport();
-}
+} // graphiteExport
 
-function closeDatabase(callback) {
-  if (typeof callback !== 'function') {
-    // throw
-  }
-  if (dbOpened) {
-    db.close(function(err) {
-      if (!err) {
-        dbOpened = false; 
-        log.info('DB: closed successfully.');
+function flushGraphite(callback) {
+  if (graphiteCacheValuesFull.length > 0) {
+    var graphiteValues = graphiteCacheValuesFull;
+    graphiteCacheValuesFull = [];
+
+    graphite.send(graphiteValues, function() {
+      log.info('GRAPHITE: ' + graphiteValues.length + 'flushed');
+      if (typeof callback === 'function') {
+        callback();
       }
-      else {
-        log.warn('DB: error closing database. ' + JSON.stringify(err));
-        setTimeout(closeDatabase, 5000);
-      }
-      callback(err);
     });
   }
   else {
-    callback();
+    log.info('Graphite: nothing to flush');
+    if (typeof callback === 'function') {
+      callback();
+    }
   }
-}
+} //flushGraphite
 
-
-/******************************************************************************
- *
- * Graphite/carbon
- *
- */
-function checkGrahiteConfig() {
-  if (options.graphite &&
-      options.graphite.ip &&
-      options.graphite.port !== '0.0.0.0') {
-    return true;
-  }
-  else {
-    info.warn('HMSRV: incomplete graphite config');
-  }
-}
 
 /******************************************************************************
  *
@@ -956,7 +965,7 @@ function logEvent(event) {
  *
  */
 function setupCron() {
-  var job = new CronJob({
+  summaryJob = new CronJob({
     cronTime: '0 0 12 * * 0-6',
     onTick:  function () {
       mail.send('hmsrv summary', getSummary(), function() {
@@ -966,6 +975,10 @@ function setupCron() {
     },
     start: true
   });
+}
+
+function stopCron() {
+  summaryJob.stop();
 }
 
 function getSummary() {
@@ -1005,11 +1018,13 @@ function shutdown(params) {
     stopping = true;
     log.info('HMSRV: "' + params.event + '", shutting down...');
 
+    stopCron();
     closeRpc(function() {
-      flushDatabase(function() {
-        closeDatabase(function() {
+      // flushDatabase(function() {
+      flushGraphite(function() {
+        // closeDatabase(function() {
           exit();
-        });
+        // });
       });
     });
   }
@@ -1026,7 +1041,7 @@ function exit() {
 
     process.exit();
   }
-  else if (shutdownCount > 2) {
+  else if (shutdownCount > 15) {
     log.warn('HMSRV: shutdown failed for 3 times, bye anyway!');
     process.exit();
   }
@@ -1034,7 +1049,7 @@ function exit() {
     log.info('HMSRV: shutdown still in progress...');
     setTimeout(function() {
       exit();
-    }, 10000);
+    }, 1000);
   }
 }
 
@@ -1104,7 +1119,7 @@ mail.init(options);
 setupServer();
 
 setupFileSystem(function () {
-  setupDatabase(function() {
+  // setupDatabase(function() {
     setupGraphite(function() {
       setupRega(function() {
         loadRegaData(function() {
@@ -1123,6 +1138,7 @@ setupFileSystem(function () {
 
             var dbFlushId = setInterval(function() {
               flushDatabase();
+              flushGraphite();
             }, dbFlushInterval * 1000);
 
             setupCron();
@@ -1140,7 +1156,7 @@ setupFileSystem(function () {
         });
       });
     });
-  });
+  // });
 });
 
 })();

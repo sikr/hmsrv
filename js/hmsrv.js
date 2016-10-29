@@ -745,10 +745,10 @@ function flushDatabase(callback) {
     dbCacheValuesFull = [];
 
     // db.insertValues(dbTables.values, values, function() {
-    //   log.info('DB: ' + values.length + ' flushed');
+    //   log.info('DB: ' + values.length + ' values flushed');
     //   countValues += values.length;
     //   db.insertValues(dbTables.valuesFull, valuesFull, function() {
-    //     log.info('DB: ' + valuesFull.length + ' flushed (full)');
+    //     log.info('DB: ' + valuesFull.length + ' values flushed (full)');
     //     countValuesFull += valuesFull.length;
     //   });
     // });
@@ -869,7 +869,7 @@ function flushGraphite(callback) {
     graphiteCacheValuesFull = [];
 
     graphite.send(graphiteValues, function() {
-      log.info('GRAPHITE: ' + graphiteValues.length + 'flushed');
+      log.info('GRAPHITE: ' + graphiteValues.length + ' values flushed');
       if (typeof callback === 'function') {
         callback();
       }

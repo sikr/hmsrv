@@ -915,7 +915,7 @@ function logEvent(event) {
     if (isNaN(value)) {
       if (typeof event[3] === 'boolean') {
         value = (event[3] === true)? 1 : 0;
-        log.info('RPC: converted non numeric (boolean) to integer: ' + address + ', ' + name + ', ' + event[3] + ' -> ' + value);
+        log.debug('RPC: converted non numeric (boolean) to integer: ' + address + ', ' + name + ', ' + event[3] + ' -> ' + value);
       }
       else {
         store = false;
@@ -926,6 +926,11 @@ function logEvent(event) {
       id = dpIndex['BidCos-RF.' + address + '.' + name];
 
       if (id !== undefined) {
+
+        // hack to solve HM-ES-TX-WM overflow at 838860,7 Wh
+        if (parseInt(id, 10) === 3177) {
+          value += (3 * 838860.7) + 248945 + 222000;
+        }
         status = '';
         if (dpValues[id] === undefined) {
           status = 'new';

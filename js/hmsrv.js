@@ -1,7 +1,7 @@
 /*
  * hmsrv.js
  *
- * Receive and send data from Homematic CCU, store data in sqlite3 db and
+ * Receive and send data from Homematic CCU, store data in graphite db and
  * make data accessible via XHR/Websocket for web applications.
  * 
  * 
@@ -14,7 +14,6 @@
  *
  * Notes:
  *
- * convert to localtime in sqlite: "SELECT datetime(timestamp / 1000, 'unixepoch', 'localtime')"
  *
  *
  */
@@ -38,7 +37,7 @@ var persistence = require('../data/persistence.json');
 var options     = null;
 var CronJob     = require('cron').CronJob;
 var summaryJob  = null;
-var assert      = require('assert');
+// var assert      = require('assert');
 var os          = require('os');
 
 //
@@ -50,7 +49,6 @@ var credentials = { key: key, cert: certificate};
 var express     = require('express');
 var app         = express();
 var socketio    = require('socket.io');
-var net         = require('net');
 var webSockets  = [];
 var io;
 var https       = require('https');
@@ -89,7 +87,6 @@ var rpcReconectCount = 0;
 //
 var directories = {
   data: __dirname + '/../data',
-  db  : __dirname + '/../db',
   log : __dirname + '/../log'
 };
 
@@ -103,68 +100,8 @@ var rooms      = {};
 var dpIndex    = {}; // index of homematic adress > homeatic id
 var dpValues   = []; // latest datapoint values to identify changes
 
-//
-// DB
-//
-var db       = require('./db');
-var dbDir    = directories.db;
-var dbFile;
-var dbOpened = false;
-
-var tableValues =
-  'timestamp     INTEGER, ' +
-  'id            INTEGER, ' +
-  'value         REAL     ';
-
-var tableDevices = 
-  'Id            INTEGER, ' +
-  'Address       TEXT,    ' + 
-  'HssType       TEXT,    ' + 
-  'Interface     TEXT,    ' + 
-  'Name          TEXT,    ' + 
-  'TypeName      TEXT     ';
-
-var tableChannels =
-  'Id            INTEGER, ' + 
-  'Address       TEXT,    ' + 
-  'ChannelType   INTEGER, ' +
-  'ChnDirection  INTEGER, ' +
-  'ChnLabel      TEXT,    ' +
-  'HssType       TEXT,    ' +
-  'Name          TEXT,    ' +
-  'Parent        INTEGER, ' +
-  'TypeName      TEXT     ';
-
-var tableDatapoints = 
-  'Id            INTEGER, ' + 
-  'Name          TEXT,    ' + 
-  'Operations    INTEGER, ' + 
-  'Parent        INTEGER, ' + 
-  'Timestamp     INTEGER, ' + 
-  'TypeName      TEXT,    ' + 
-  'Value         INTEGER, ' + // boolean
-  'ValueList     TEXT,    ' +
-  'ValueType     INTEGER, ' + 
-  'ValueUnit     TEXT,    ' +
-  'record        INTEGER  ';
-
-var tableRooms = 
-  'Id            INTEGER, ' + 
-  'EnumInfo      TEXT,    ' + 
-  'Name          TEXT,    ' + 
-  'TypeName      TEXT     ';
-
-var dbTables = {'values':     {'name': 'vals', 'sql': tableValues, 'data': null, 'clear': false},
-                'valuesFull': {'name': 'valsFull', 'sql': tableValues, 'data': null, 'clear': false}};
-                // 'devices':    {'name': 'devices', 'sql': tableDevices, 'data': null, 'clear': false},
-                // 'channels':   {'name': 'channels', 'sql': tableChannels, 'data': null, 'clear': false},
-                // 'datapoints': {'name': 'datapoints', 'sql': tableDatapoints, 'data': null, 'clear': false},
-                // 'rooms':      {'name': 'rooms', 'sql': tableRooms, 'data': null, 'clear': false}};
-var dbCacheValues = [];
-var dbCacheValuesFull = [];
-var dbFlushingPaused = false;
-var dbFlushId = 0;
-var dbFlushInterval = 60; // flush once a minute to db
+var nFlushId = 0;
+var nFlushInterval = 60; // flush once a minute to graphite
 var countValues = 0;
 var countValuesFull = 0;
 
@@ -216,17 +153,17 @@ function setupServer() {
   }, sendResponse);
 
   app.get('/values', function (req, res, next) {
-    var id = parseInt(req.query.id, 10);
-    if (!isNaN(id)) {
-      db.readId(dbTables.values, id, function(err, data) {
-        if (!err) {
-          response = data;
-        }
-        else {
-          response = {'msg': 'error reading database'};
-        }
-      });
-    }
+    // var id = parseInt(req.query.id, 10);
+    // if (!isNaN(id)) {
+    //   db.readId(dbTables.values, id, function(err, data) {
+    //     if (!err) {
+    //       response = data;
+    //     }
+    //     else {
+    //       response = {'msg': 'error reading database'};
+    //     }
+    //   });
+    // }
     next();
   }, sendResponse);
 
@@ -271,7 +208,7 @@ function setupServer() {
   io.on('connection', function (socket) {
     webSockets.push(socket);
     log.info('HMSRV: websocket: %s successfully connected', socket.handshake.address);
-    socket.on('disconnect', function (socket) {
+    socket.on('disconnect', function (/*socket*/) {
       log.info('HMSRV: websocket: %s disconnected', this.handshake.address);
     });
     socket.on('system', function (data) {
@@ -282,17 +219,6 @@ function setupServer() {
       else if (msg === 'mail') {
         mail.send('hmsrv test mail\n\n', getSummary(), function() {
         });
-      }
-      else if (msg === 'graphite-export') {
-        if (checkGraphiteConfig()) {
-          log.info('HMSRV: starting graphite export...');
-          graphiteExport(function(result) {
-            pushToWebSockets({'graphite-export': result});
-          });
-        }
-        else {
-          info.warn('HMSRV: graphite export failed due to erroneous configuration');
-        }
       }
       log.debug(data);
     });
@@ -355,49 +281,6 @@ function loadRegaData(callback) {
       }
     }
   });
-
-  // db.readTableCount(dbTables.devices, function (err, data) {
-  //   if (err) {
-  //     log.error('HMSRV: error reading from database, ' + JSON.stringify(err));
-  //   }
-  //   else {
-  //     var tables = [dbTables.devices, dbTables.channels, dbTables.datapoints, dbTables.rooms];
-
-  //     if (data[0].count === 0) {
-  //       loadRegaDataFromCCU(0, function () {
-
-  //         // clean datapoints
-  //         for (var i in datapoints) {
-  //           datapoints[i].Timestamp = 0;
-  //           if (datapoints[i].ValueUnit === '') {
-  //             datapoints[i].ValueUnit = '';
-  //           }
-  //           if (datapoints[i].ValueList === undefined) {
-  //             datapoints[i].ValueList = '';
-  //           }
-  //         }
-  //         // write CCU rega data to db
-  //         db.fillTables(tables, function() {
-  //           if (typeof callback === 'function') {
-  //             callback();
-  //           }
-  //         });
-  //       });
-  //     }
-  //     else {
-  //       // read rega data from db
-  //       db.readTables(tables, function(_tables) {
-  //         devices = _tables.devices;
-  //         channels = _tables.channels;
-  //         datapoints = _tables.datapoints;
-  //         rooms = _tables.rooms;
-  //         if (typeof callback === 'function') {
-  //           callback();
-  //         }
-  //       });
-  //     }
-  //   }
-  // });
 }
 
 function writeRegaDataToFile(callback) {
@@ -430,11 +313,9 @@ function writeRegaDataToFile(callback) {
           log.error('HMSRV: error writing rega data to file, unknown file: ' + fullPath);
           break;
       }
-      fs.writeFile(fullPath, data, function(err, data) {
+      fs.writeFile(fullPath, data, function(err/*, data*/) {
         if (err) {
           log.error('HMSRV: error reading rega data from file: ' + fullPath);
-        }
-        else {
         }
         return write(_regaData.shift());
       });
@@ -574,6 +455,9 @@ function setupRpcServer() {
     rpcServer.on('system.listMethods', function (err, params, callback) {
         callback(['system.listMethods', 'system.multicall']);
     });
+    rpcServer.on('listDevices', function (err, params, callback) {
+        callback(['listDevices', []]);
+    });
     rpcServer.on('system.multicall', function (err, params, callback) {
       for (var i in params[0]) {
         logEvent(params[0][i].params);
@@ -646,7 +530,7 @@ function initRpcEventReceiver(callback) {
       type + options.hmsrv.ip + ':' + options.hmsrv.rpcPort.toString(),
       '123456'
     ],
-    function (err, res) {
+    function (err/*, res*/) {
       if (err) {
         rpcEventReceiverConnected = false;
         log.error('RPC: "init" failed.');
@@ -694,98 +578,6 @@ function closeRpc(callback) {
 
 /******************************************************************************
  *
- * DB
- *
- */
-function setupDatabase(callback) {
-  log.info('DB: Initialize Database - ' + dbDir + '/' + dbFile);
-  db.open(dbDir + '/' + dbFile, function() {
-    dbOpened = true;
-    log.info('DB: opened successfully.');
-    db.initialize(dbTables, function(err) {
-      if (!err) {
-        log.info('DB: database initialized successfully.');
-        // db.readLatestValues(dbTables.values, function(err, data) {
-        //   if (!err) {
-        //     for (var i in data) {
-        //       dpValues[data[i]._id] = {timestamp: data[i].timestamp, value: data[i].value};
-        //     }
-        //     callback();
-        //   }
-        //   else {
-        //     log.error('DB: ' + err.msg);
-        //     // unrecoverable error: shutdown
-        //     shutdown({event: 'emergenacyshutdown'});
-        //   }
-        // });
-        if (typeof callback === 'function') {
-          callback();
-        }
-      }
-      else {
-        log.error('DB: ' + err.msg);
-        // unrecoverable error: shutdown
-        shutdown({event: 'emergenacyshutdown'});
-      }
-    });
-  });
-}
-
-function flushDatabase(callback) {
-  if (dbFlushingPaused) {
-    log.info('DB: flushing paused');
-    if (typeof callback === 'function') {
-      callback();
-    }
-  }
-  else if (dbCacheValuesFull.length > 0) {
-    var values = dbCacheValues;
-    dbCacheValues = [];
-    var valuesFull = dbCacheValuesFull;
-    dbCacheValuesFull = [];
-
-    // db.insertValues(dbTables.values, values, function() {
-    //   log.info('DB: ' + values.length + ' values flushed');
-    //   countValues += values.length;
-    //   db.insertValues(dbTables.valuesFull, valuesFull, function() {
-    //     log.info('DB: ' + valuesFull.length + ' values flushed (full)');
-    //     countValuesFull += valuesFull.length;
-    //   });
-    // });
-  }
-  else {
-    log.info('DB: nothing to flush');
-    if (typeof callback === 'function') {
-      callback();
-    }
-  }
-}
-
-function closeDatabase(callback) {
-  if (typeof callback !== 'function') {
-    // throw
-  }
-  if (dbOpened) {
-    db.close(function(err) {
-      if (!err) {
-        dbOpened = false; 
-        log.info('DB: closed successfully.');
-      }
-      else {
-        log.warn('DB: error closing database. ' + JSON.stringify(err));
-        setTimeout(closeDatabase, 5000);
-      }
-      callback(err);
-    });
-  }
-  else {
-    callback();
-  }
-}
-
-
-/******************************************************************************
- *
  * Graphite
  *
  */
@@ -814,54 +606,9 @@ function checkGraphiteConfig() {
     return true;
   }
   else {
-    info.warn('HMSRV: incomplete graphite config');
+    log.warn('HMSRV: incomplete graphite config');
   }
 } // checkGraphiteConfig
-
-function graphiteExport(callback) {
-  assert(typeof callback === 'function');
-  dbFlushingPaused = true;
-  var metrics = [];
-  var totalCount = 0;
-
-  function startExport() {
-    for (var i in persistence) {
-      if (typeof persistence[i].graphite !== undefined) {
-        metrics.push(i);
-        totalCount++;
-      }
-    }
-    log.info('HMSRV: ids to export to graphite: ' + metrics.join(','));
-    _export(metrics.shift());
-  }
-
-  function _export(metric) {
-    if (metric) {
-      db.readIdRaw(dbTables.valuesFull, metric, function(err, data) {
-        if (!err) {
-          log.info('HMSRV: sending blob for datapoint ' + persistence[metric].graphite.path + ' with ' + data.length + ' entries to graphite');
-          graphite.sendBlob(persistence[metric].graphite.path, data, function(err) {
-            if (!err) {
-              _export(metrics.shift());
-            }
-            else {
-              callback(err);
-            }
-          });
-        }
-        else {
-          log.error('HMSRV: error reading datapoint ' + persistence[metric].graphite.path);
-        }
-      });
-    }
-    else {
-      log.info('HMSRV: export to Graphite finished');
-      dbFlushingPaused = false;
-      callback();
-    }
-  }
-  startExport();
-} // graphiteExport
 
 function flushGraphite(callback) {
   if (graphiteCacheValuesFull.length > 0) {
@@ -935,8 +682,6 @@ function logEvent(event) {
         if (dpValues[id] === undefined) {
           status = 'new';
           dpValues[id] = {timestamp: timestamp, value: value};
-          // push to db queue
-          dbCacheValues.push({timestamp: timestamp, id: id, value: value});
         }
         else if (dpValues[id].value === value) {
           status = 'unchanged';
@@ -944,11 +689,9 @@ function logEvent(event) {
         else {
           status = 'changed';
           dpValues[id] = {timestamp: timestamp, value: value};
-          dbCacheValues.push({timestamp: timestamp, id: id, value: value});
         }
         log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
         pushToWebSockets('update', {timestamp: timestamp, status: status, id: id, address: address, name: name, value: value});
-        dbCacheValuesFull.push({timestamp: timestamp, id: id, value: value});
         if (persistence[id] && persistence[id].graphite) {
           graphiteCacheValuesFull.push({
             path: persistence[id].graphite.path,
@@ -1023,13 +766,10 @@ function shutdown(params) {
     stopping = true;
     log.info('HMSRV: "' + params.event + '", shutting down...');
 
-    stopCron();
+    // stopCron();
     closeRpc(function() {
-      // flushDatabase(function() {
       flushGraphite(function() {
-        // closeDatabase(function() {
-          exit();
-        // });
+        exit();
       });
     });
   }
@@ -1037,7 +777,7 @@ function shutdown(params) {
 
 function exit() {
   shutdownCount++;
-  if (!rpcEventReceiverConnected && !dbOpened) {
+  if (!rpcEventReceiverConnected) {
     log.info('HMSRV: shutdown successful, bye!');
 
     log.info('HMSRV was running for ' +
@@ -1114,8 +854,6 @@ if (options === undefined) {
   process.exit(1);
 }
 
-dbFile  = options.sqlite.filename;
-
 log.init(options);
 log.info('Starting HMSRV in ' + stats.runMode + ' mode');
 log.info('Visit https://' + options.hmsrv.ip + ':' + options.hmsrv.httpsPort.toString());
@@ -1137,16 +875,15 @@ setupFileSystem(function () {
               dpCount++;
             }
             for (i in dpIndex) {
-              log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
+              // log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
             }
             log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
 
-            var dbFlushId = setInterval(function() {
-              flushDatabase();
+            nFlushId = setInterval(function() {
               flushGraphite();
-            }, dbFlushInterval * 1000);
+            }, nFlushInterval * 1000);
 
-            setupCron();
+            // setupCron();
 
             log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
 

@@ -1,38 +1,61 @@
 {
-  "development" :
+  "development":
   {
     "hmsrv": {
       "ip": "0.0.0.0",
       "httpsPort": 1443,
-      "rpcPort": 8081,
       "productive": false
     },
     "ccu": {
       "ip": "0.0.0.0",
-      "rpcPort": 2001
+      "rpc": [
+        {
+          "name": "Homematic Wireless",
+          "type": "bin",
+          "port": 2001,
+          "namespace": "hm",
+          "ccuPort": 2001,
+          "localPort": 8081
+        },
+        {
+          "name": "Homematic IP",
+          "type": "xml",
+          "port": 2010,
+          "namespace": "hmip",
+          "ccuPort": 2010,
+          "localPort": 8082,
+          "useHttps": false
+        },
+        {
+          "name": "Homematic CUxD",
+          "type": "bin",
+          "port": 8701,
+          "namespace": "hmcuxd",
+          "ccuPort": 8701,
+          "localPort": 8083
+        }
+      ]
+
     },
     "log": {
       "file": {
         "name": "../log/hmsrv.dev.log",
-        "level": 2,
+        "level": 1,
         "maxLength": -1
         },
       "console": {
         "maxLength": 139,
-        "level": 2,
+        "level": 0,
         "colored": true
       }
-    },
-    "sqlite": {
-      "filename": "db/hmsrv.dev.sqlite"
     },
     "mail": {
       "host": "smtp.foo.com",
       "port": 587,
-      "user": "foo@foo.com",
-      "password": "bar",
+      "user": "foo@bar.com",
+      "password": "baz",
       "secure": true,
-      "recipient": "bar@bar.com"
+      "recipient": "bar@baz.com"
     },
     "graphite": {
       "ip": "0.0.0.0",
@@ -40,86 +63,132 @@
       "prefix": "dev"
     }
   },
-  "test" :
+  "test":
   {
     "hmsrv": {
       "ip": "0.0.0.0",
       "httpsPort": 2443,
-      "rpcPort": 8082,
       "productive": false
     },
     "ccu": {
       "ip": "0.0.0.0",
-      "rpcPort": 2001
+      "rpc": [
+        {
+          "name": "Homematic Wireless",
+          "type": "bin",
+          "port": 2001,
+          "namespace": "hm",
+          "ccuPort": 2001,
+          "localPort": 8081
+        },
+        {
+          "name": "Homematic IP",
+          "type": "xml",
+          "port": 2010,
+          "namespace": "hmip",
+          "ccuPort": 2010,
+          "localPort": 8082,
+          "useHttps": false
+        },
+        {
+          "name": "Homematic CUxD",
+          "type": "bin",
+          "port": 8701,
+          "namespace": "hmcuxd",
+          "ccuPort": 8701,
+          "localPort": 8083
+        }
+      ]
+
     },
     "log": {
       "file": {
         "name": "../log/hmsrv.test.log",
-        "level": 2,
+        "level": 1,
         "maxLength": -1
         },
       "console": {
         "maxLength": 139,
-        "level": 2,
+        "level": 0,
         "colored": true
       }
-    },
-    "sqlite": {
-      "filename": "db/hmsrv.test.sqlite"
     },
     "mail": {
       "host": "smtp.foo.com",
       "port": 587,
-      "user": "foo@foo.com",
-      "password": "bar",
+      "user": "foo@bar.com",
+      "password": "baz",
       "secure": true,
-      "recipient": "bar@bar.com"
+      "recipient": "bar@baz.com"
     },
     "graphite": {
       "ip": "0.0.0.0",
       "port": 2003,
-      "prefix": "test"
+      "prefix": "dev"
     }
   },
-  "production" :
+  "production":
   {
     "hmsrv": {
       "ip": "0.0.0.0",
       "httpsPort": 443,
-      "rpcPort": 8083,
-      "productive": false
+      "productive": true
     },
     "ccu": {
       "ip": "0.0.0.0",
-      "rpcPort": 2001
+      "rpc": [
+        {
+          "name": "Homematic Wireless",
+          "type": "bin",
+          "port": 2001,
+          "namespace": "hm",
+          "ccuPort": 2001,
+          "localPort": 8081
+        },
+        {
+          "name": "Homematic IP",
+          "type": "xml",
+          "port": 2010,
+          "namespace": "hmip",
+          "ccuPort": 2010,
+          "localPort": 8082,
+          "useHttps": false
+        },
+        {
+          "name": "Homematic CUxD",
+          "type": "bin",
+          "port": 8701,
+          "namespace": "hmcuxd",
+          "ccuPort": 8701,
+          "localPort": 8083
+        }
+      ]
+
     },
     "log": {
       "file": {
-        "name": "../log/hmsrv-prod.log",
-        "level": 2,
+        "name": "../log/hmsrv.prod.log",
+        "level": 1,
         "maxLength": -1
         },
       "console": {
         "maxLength": 139,
-        "level": 2,
+        "level": 0,
         "colored": true
       }
-    },
-    "sqlite": {
-      "filename": "db/hmsrv.sqlite"
     },
     "mail": {
       "host": "smtp.foo.com",
       "port": 587,
-      "user": "foo@foo.com",
-      "password": "bar",
+      "user": "foo@bar.com",
+      "password": "baz",
       "secure": true,
-      "recipient": "bar@bar.com"
+      "recipient": "bar@baz.com"
     },
     "graphite": {
       "ip": "0.0.0.0",
       "port": 2003,
-      "prefix": ""
+      "prefix": "dev"
     }
-  }
+  },
 }

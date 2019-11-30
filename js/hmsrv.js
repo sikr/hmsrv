@@ -72,15 +72,9 @@ var regaUp      = false;
 //
 // RPC
 //
-// var rpcType = 'plain';
-var rpcType = 'bin';
-var rpc     = (rpcType === 'bin') ? require('binrpc') : require('homematic-xmlrpc');
-var rpcClient;
-var rpcServer;
-var rpcServerUp = false;
-var rpcEventReceiverConnected = false;
-var rpcReconectTimeout = 20;
-var rpcReconectCount = 0;
+var Rpc = require('./hmrpc.js');
+var hmrpc = [];
+const rpcNoCUxD = 1;
 
 //
 // Filesystem
@@ -100,7 +94,6 @@ var rooms      = {};
 var dpIndex    = {}; // index of homematic adress > homeatic id
 var dpValues   = []; // latest datapoint values to identify changes
 
-var nFlushId = 0;
 var nFlushInterval = 60; // flush once a minute to graphite
 var countValues = 0;
 var countValuesFull = 0;
@@ -216,21 +209,21 @@ function setupServer() {
       if (msg === 'shutdown') {
         shutdown({event: 'usershutdown'});
       }
-      else if (msg === 'mail') {
-        mail.send('hmsrv test mail\n\n', getSummary(), function() {
-        });
-      }
+      // else if (msg === 'mail') {
+      //   mail.send('hmsrv test mail\n\n', getSummary(), function() {
+      //   });
+      // }
       log.debug(data);
     });
     // socket.emit('ping');
   });
-}
+} //setupServer()
 
 function pushToWebSockets(method, message) {
   for (var socket in webSockets) {
     webSockets[socket].emit(method, JSON.stringify(message));
   }
-}
+} // pushToWebSockets()
 
 
 /******************************************************************************
@@ -244,9 +237,9 @@ function setupRega(callback) {
     ready: function() {
       log.info('CCU: rega is ready.');
       regaUp = true;
-      if (typeof callback === "function") {
-        callback();
-      }
+      // if (typeof callback === "function") {
+      //   callback();
+      // }
     },
     down: function() {
       log.error('CCU: rega is down.');
@@ -255,7 +248,7 @@ function setupRega(callback) {
       log.error('CCU: rega is unreachable.');
     }
   });
-}
+} // setupRega()
 
 function loadRegaData(callback) {
   loadRegaDataFromFile(function(ret) {
@@ -281,7 +274,7 @@ function loadRegaData(callback) {
       }
     }
   });
-}
+} // loadRegaData()
 
 function writeRegaDataToFile(callback) {
   var _regaData = [];
@@ -327,7 +320,7 @@ function writeRegaDataToFile(callback) {
     }
   }
   write(_regaData.shift());
-}
+} // writeRegaDataToFile()
 
 function loadRegaDataFromFile(callback) {
   var _regaData = [];
@@ -389,7 +382,7 @@ function loadRegaDataFromFile(callback) {
     }
   }
   read(_regaData.shift());
-}
+} // loadRegaDataFromFile()
 
 function loadRegaDataFromCCU(index, callback) {
   if (index === 0) {
@@ -429,152 +422,31 @@ function loadRegaDataFromCCU(index, callback) {
       }
     }
   });
-}
-
+} // loadRegaDataFromCCU()
 
 /******************************************************************************
  *
  * RPC
  *
  */
-function setupRpc(callback) {
-  setupRpcServer();
-  // setup client delayed to ensure server is up
-  setTimeout(function() {
-    setupRpcClient(callback);
-  }, 1000);
-}
-
-function setupRpcServer() {
-  if (rpcServerUp) {
-    log.warn('RPC: server is already up; wont start again');
+function setupRpc(rpc, callback) {
+  for (var i = 0; i < (rpc.length-rpcNoCUxD); i++) {
+    hmrpc[i] = new Rpc.HomematicRpc({options: options.ccu.rpc[i], log: log, event: logEvent});
+    hmrpc[i].start();
   }
-  else {
-    rpcServer = rpc.createServer({host: options.hmsrv.ip, port: options.hmsrv.rpcPort.toString()});
-
-    rpcServer.on('system.listMethods', function (err, params, callback) {
-        callback(['system.listMethods', 'system.multicall']);
-    });
-    rpcServer.on('listDevices', function (err, params, callback) {
-        callback(['listDevices', []]);
-    });
-    rpcServer.on('system.multicall', function (err, params, callback) {
-      for (var i in params[0]) {
-        logEvent(params[0][i].params);
-      }
-      callback([]);
-    });
-    rpcServer.on('event', function (err, params, callback) {
-      logEvent(params);
-      if (typeof callback === 'function') {
-        callback();
-      }
-    });
-    rpcServer.on('NotFound', function (err, params, callback) {
-      log.warn('RPC: "NotFound" occured on method ' + err);
-      if (typeof callback === 'function') {
-        callback();
-      }
-    });
+  if (typeof callback === "function") {
+    callback();
   }
-}
+} // setupRpc()
 
-function setupRpcClient(callback) {
-  rpcClient = rpc.createClient({host: options.ccu.ip, port: options.ccu.rpcPort.toString()});
-
-  // these methods are only available in xmlrpc_bin library
-  if (rpcType === 'bin') {
-    rpcClient.on('error', function(err) {
-      // to do
-      log.error('RPC: an error occured: ' + JSON.stringify(err));
-    });
-    rpcClient.on('connecting', function() {
-      log.info('RPC: connecting...');
-    });
-    rpcClient.on('reconnecting', function() {
-      log.info('RPC: reconnecting...');
-    });
-    rpcClient.on('connect', function() {
-      rpcReconectCount = 0;
-      log.info('RPC: client connected.');
-      initRpcEventReceiver(callback);
-      callback = null; // do not callback on re-connect
-    });
-    rpcClient.on('close', function() {
-      rpcEventReceiverConnected = false;
-      if (!stopping) {
-        if (rpcReconectCount == 10 && options.hmsrv.productive === true) {
-          mail.send('HMSRV ERROR: RPC reconnect failed 10 times!!!',
-            'Hi,\n\nthe RPC reconnect failed for 10 times now! Check this soon!\n\nCheers, HMSRV',
-            function() {
-          });
-        }
-        // reconnect
-        rpcReconectCount++;
-        setTimeout(function() {
-          log.info('RPC: try to reconnect, approach ' + rpcReconectCount.toString());
-          rpcClient.connect(true);
-        }, rpcReconectTimeout * 1000);
-      }
-      log.info('RPC: connection closed.');
-    });
+function stopRpc(callback) {
+  for (var i = 0; i < (hmrpc.length); i++) {
+    hmrpc[i].stop();
   }
-  else {
-    initRpcEventReceiver(callback);
+  if (typeof callback === "function") {
+    callback();
   }
-}
-
-function initRpcEventReceiver(callback) {
-  var type = (rpcType === 'plain')? 'http://' : 'xmlrpc_bin://';
-  rpcClient.methodCall('init', [
-      type + options.hmsrv.ip + ':' + options.hmsrv.rpcPort.toString(),
-      '123456'
-    ],
-    function (err/*, res*/) {
-      if (err) {
-        rpcEventReceiverConnected = false;
-        log.error('RPC: "init" failed.');
-      }
-      else {
-        rpcEventReceiverConnected = true;
-        log.info('RPC: "init" successful.');
-      }
-      if (typeof callback === 'function') {
-        callback();
-      }
-    }
-  );
-}
-
-function closeRpc(callback) {
-  if (rpcEventReceiverConnected) {
-    var type = (rpcType === 'plain')? 'http://' : 'xmlrpc_bin://';
-    rpcClient.methodCall('init', [
-        type + options.hmsrv.ip + ':' + options.hmsrv.rpcPort.toString(),
-        ''
-      ],
-      function (err, res) {
-        if (err) {
-          log.error('RPC: error closing connection to ccu.');
-        }
-        else {
-          rpcEventReceiverConnected = false;
-          log.info('RPC: connection closed successfully');
-        }
-        if (typeof callback === 'function') {
-          callback();
-        }
-      }
-    );
-  }
-  else {
-    if (typeof callback === 'function') {
-      log.info('RPC: already closed');
-      callback();
-    }
-  }
-}
-
+} // stopRpc()
 
 /******************************************************************************
  *
@@ -608,7 +480,7 @@ function checkGraphiteConfig() {
   else {
     log.warn('HMSRV: incomplete graphite config');
   }
-} // checkGraphiteConfig
+} // checkGraphiteConfig()
 
 function flushGraphite(callback) {
   if (graphiteCacheValuesFull.length > 0) {
@@ -628,7 +500,7 @@ function flushGraphite(callback) {
       callback();
     }
   }
-} //flushGraphite
+} //flushGraphite()
 
 
 /******************************************************************************
@@ -646,7 +518,7 @@ function setupFileSystem(callback) {
   if (typeof callback === 'function') {
     callback();
   }
-}
+} // setupFileSystem()
 
 function logEvent(event) {
   if (!stopping) {
@@ -671,6 +543,9 @@ function logEvent(event) {
     }
     if (store) {
       id = dpIndex['BidCos-RF.' + address + '.' + name];
+      if (id === undefined) {
+        id = dpIndex['HmIP-RF.' + address + '.' + name];
+      }      
 
       if (id !== undefined) {
 
@@ -705,7 +580,7 @@ function logEvent(event) {
       }
     }
   }
-}
+} // logEvent()
 
 /******************************************************************************
  *
@@ -716,18 +591,18 @@ function setupCron() {
   summaryJob = new CronJob({
     cronTime: '0 0 12 * * 0-6',
     onTick:  function () {
-      mail.send('hmsrv summary', getSummary(), function() {
-      });
+      // mail.send('hmsrv summary', getSummary(), function() {
+      // });
       countValues = 0;
       countValuesFull = 0;
     },
     start: true
   });
-}
+} // setupCron()
 
 function stopCron() {
   summaryJob.stop();
-}
+} // stopCron()
 
 function getSummary() {
   return 'Hi!\n\n' +
@@ -740,7 +615,7 @@ function getSummary() {
          'Uptime: ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date()) + '\n' +
          'Starttime ' + utils.getPrettyDate(stats.startTime) + '\n\n' +
          'Cheers, HMSRV\n';
-}
+} // getSummary()
 
 //
 // ensure graceful shutdown
@@ -750,10 +625,10 @@ process.on('SIGINT', shutdown.bind(null, {event: 'SIGINT'}));
 process.on("uncaughtException", function(err) {
   try {
     var msg = JSON.stringify(err.stack);
-    if (options.hmsrv.productive === true) {
-      mail.send('hmsrv uncaughtException', msg, function() {
-      });
-    }
+    // if (options.hmsrv.productive === true) {
+    //   mail.send('hmsrv uncaughtException', msg, function() {
+    //   });
+    // }
     log.error(msg);
     shutdown.bind(null, {event: 'uncaughtException'});
   } catch (e) {
@@ -767,36 +642,17 @@ function shutdown(params) {
     log.info('HMSRV: "' + params.event + '", shutting down...');
 
     // stopCron();
-    closeRpc(function() {
+    stopRpc(function() {
       flushGraphite(function() {
         exit();
       });
     });
   }
-}
+} //shutdown()
 
 function exit() {
-  shutdownCount++;
-  if (!rpcEventReceiverConnected) {
-    log.info('HMSRV: shutdown successful, bye!');
-
-    log.info('HMSRV was running for ' +
-           utils.getHumanReadableTimeSpan(stats.startTime, new Date()) +
-           ' since ' + utils.getPrettyDate(stats.startTime));
-
-    process.exit();
-  }
-  else if (shutdownCount > 15) {
-    log.warn('HMSRV: shutdown failed for 3 times, bye anyway!');
-    process.exit();
-  }
-  else {
-    log.info('HMSRV: shutdown still in progress...');
-    setTimeout(function() {
-      exit();
-    }, 1000);
-  }
-}
+  process.exit();
+} // exit()
 
 
 function parseArgs() {
@@ -816,7 +672,42 @@ function parseArgs() {
       process.exit(1);
     }
   }
-}
+} // parseArgs()
+
+function prepareConfig() {
+  switch (stats.runMode) {
+    case 'DEVELOPMENT':
+    {
+      options = optionsFile.development;
+      break;
+    }
+    case 'TEST':
+    {
+      options = optionsFile.test;
+      break;
+    }
+    case 'PRODUCTION':
+    {
+      options = optionsFile.production;
+      break;
+    }
+    default:
+    {
+      console.error('HMSRV: unknown run mode. Exiting...');
+      process.exit();
+    }
+  }
+  if (options === undefined) {
+    console.error('File options.json doesn\'t contain configuration for runmode "' + stats.runMode + '". Exiting...');
+    process.exit(1);
+  }
+  if (options.ccu.rpc && options.ccu.rpc.length > 0) {
+    for (var i = 0; i < options.ccu.rpc.length; i++) {
+      options.ccu.rpc[i].ccuIp = options.ccu.ip;
+      options.ccu.rpc[i].localIp = options.hmsrv.ip;
+    }
+  }
+} // prepareConfig()
 
 /******************************************************************************
  *
@@ -826,79 +717,46 @@ function parseArgs() {
 var startTime = log.time();
 
 parseArgs();
+prepareConfig();
 
-switch (stats.runMode) {
-  case 'DEVELOPMENT':
-  {
-    options = optionsFile.development;
-    break;
-  }
-  case 'TEST':
-  {
-    options = optionsFile.test;
-    break;
-  }
-  case 'PRODUCTION':
-  {
-    options = optionsFile.production;
-    break;
-  }
-  default:
-  {
-    console.error('HMSRV: unknown run mode');
-    exit();
-  }
-}
-if (options === undefined) {
-  console.error('File options.json doesn\'t contain configuration for runmode "' + stats.runMode + '"');
-  process.exit(1);
-}
 
 log.init(options);
 log.info('Starting HMSRV in ' + stats.runMode + ' mode');
 log.info('Visit https://' + options.hmsrv.ip + ':' + options.hmsrv.httpsPort.toString());
-mail.init(options);
+
+// mail.init(options);
 
 setupServer();
+setupRega();
 
 setupFileSystem(function () {
-  // setupDatabase(function() {
-    setupGraphite(function() {
-      setupRega(function() {
-        loadRegaData(function() {
-          setupRpc(function() {
+  setupGraphite(function() {
+    // setupRega(function() {
+      loadRegaData(function() {
+        setupRpc(options.ccu.rpc, function() {
 
-            var dpCount = 0;
-            // build datapoint Index name <> id
-            for (var i in datapoints) {
-              dpIndex[unescape(datapoints[i].Name)] = i;
-              dpCount++;
-            }
-            for (i in dpIndex) {
-              // log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
-            }
-            log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
+          var dpCount = 0;
+          // build datapoint Index name <> id
+          for (var i in datapoints) {
+            dpIndex[unescape(datapoints[i].Name)] = i;
+            dpCount++;
+          }
+          for (i in dpIndex) {
+            // log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
+          }
+          log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
 
-            nFlushId = setInterval(function() {
-              flushGraphite();
-            }, nFlushInterval * 1000);
+          setInterval(function() {
+            flushGraphite();
+          }, nFlushInterval * 1000);
 
-            // setupCron();
+          // setupCron();
 
-            log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
-
-            // // prevent node app from running as root permanently
-            // var uid = parseInt(process.env.SUDO_UID);
-            // // Set our server's uid to that user
-            // if (uid){
-            //   process.setuid(uid);
-            // }
-            // log.info('Server\'s UID is now ' + process.getuid());
-          });
+          log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
         });
       });
-    });
-  // });
+    // });
+  });
 });
 
 })();

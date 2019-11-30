@@ -549,10 +549,21 @@ function logEvent(event) {
 
       if (id !== undefined) {
 
+        // // hack to solve HM-ES-TX-WM overflow at 838860,7 Wh
+        // if (parseInt(id, 10) === 3177) {
+        //   value += (3 * 838860.7) + 248945 + 222000;
+        // }
         // hack to solve HM-ES-TX-WM overflow at 838860,7 Wh
         if (parseInt(id, 10) === 3177) {
-          value += (3 * 838860.7) + 248945 + 222000;
+          value += (5 * 838860.7) +
+            248945 +
+            222000 +
+            323006 +
+            206939.30 +
+            576987 +    // battery replacement
+            179520;     // ancient offset from grafana
         }
+
         status = '';
         if (dpValues[id] === undefined) {
           status = 'new';

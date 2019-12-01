@@ -12,3 +12,4 @@ private*
 regascripts/output/*
 *.pid
 ssl
+hmsrv.code-workspace

@@ -37,3 +37,9 @@ var app = angular.module("hmsrvApp", ['ngRoute'])
       $scope.class = 'navbar-' + response.stats.runMode.toLowerCase();
     });
   });
+
+var socket = io.connect(location.origin);
+
+socket.on('update', function (data) {
+  console.log(data);
+});

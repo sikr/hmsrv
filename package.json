@@ -23,7 +23,7 @@
     "angular": "1.5.3",
     "angular-route": "1.5.3",
     "binrpc": "^3.3.1",
-    "bootstrap": "3.3.6",
+    "bootstrap": "3.4.1",
     "copy-webpack-plugin": "^5.0.5",
     "cron": "^1.0.9",
     "express": "^4.13.3",

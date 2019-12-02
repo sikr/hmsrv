@@ -538,7 +538,7 @@ function logEvent(event) {
       }
       else {
         store = false;
-        log.warn('RPC: non numeric value: ' + address + ', ' + name + ', ' + event[3]);
+        log.debug('RPC: non numeric value: ' + address + ', ' + name + ', ' + event[3]);
       }
     }
     if (store) {

@@ -62,7 +62,7 @@ function HomematicRpc(adapter) {
       callback(null, []);
     });
     server.on('system.multicall', function (err, params, callback) {
-      adapter.log.info('RPC[' + adapter.options.namespace + ']: system.multicall called');
+      adapter.log.verbose('RPC[' + adapter.options.namespace + ']: system.multicall called');
       clientUpdateConnection();
       for (var i in params[0]) {
         adapter.event(params[0][i].params);
@@ -70,7 +70,7 @@ function HomematicRpc(adapter) {
       callback([]);
     });
     server.on('event', function (err, params, callback) {
-      adapter.log.info('RPC[' + adapter.options.namespace + ']: event called');
+      adapter.log.verbose('RPC[' + adapter.options.namespace + ']: event called');
       clientUpdateConnection();
       adapter.event(params);
       if (typeof callback === 'function') {
@@ -259,7 +259,7 @@ function HomematicRpc(adapter) {
             }
             else {
               clientConnected = true;
-              adapter.log.info('RPC[' + adapter.options.namespace + ']: "ping" successful.');
+              adapter.log.verbose('RPC[' + adapter.options.namespace + ']: "ping" successful.');
             }
           }
         );

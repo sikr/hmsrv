@@ -31,11 +31,18 @@ var app = angular.module("hmsrvApp", ['ngRoute'])
 
   })
   .controller("projectName", function($scope, $http) {
-    $http.get(location.origin + '/stats')
-    .success(function(response) {
-      $scope.projectName = 'Hmsrv' + '@' + response.stats.hostname + ' - ' + response.stats.runMode.toLowerCase();
-      $scope.class = 'navbar-' + response.stats.runMode.toLowerCase();
-    });
+    $http({
+      method: 'GET',
+      url: location.origin + '/stats'
+    })
+    .then(
+      function (response){
+        $scope.projectName = 'Hmsrv' + '@' + response.data.stats.hostname + ' - ' + response.data.stats.runMode.toLowerCase();
+        $scope.class = 'navbar-' + response.data.stats.runMode.toLowerCase();
+      },
+      function (error){
+      }
+    );
   });
 
 var socket = io.connect(location.origin);

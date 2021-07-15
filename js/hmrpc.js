@@ -55,11 +55,11 @@ function HomematicRpc(adapter) {
 
     server.on('system.listMethods', function (err, params, callback) {
       adapter.log.info('RPC[' + adapter.options.namespace + ']: system.listMethods called');
-      callback(['event', 'listDevices', /*'newDevices', */'system.listMethods', 'system.multicall']);
+      callback(null, ['event', 'listDevices', /*'newDevices', */'system.listMethods', 'system.multicall']);
     });
     server.on('listDevices', function (err, params, callback) {
       adapter.log.info('RPC[' + adapter.options.namespace + ']: listDevices called, params: ' + JSON.stringify(params));
-      callback(null, []);
+      callback(null);
     });
     server.on('system.multicall', function (err, params, callback) {
       adapter.log.verbose('RPC[' + adapter.options.namespace + ']: system.multicall called');
@@ -67,20 +67,20 @@ function HomematicRpc(adapter) {
       for (var i in params[0]) {
         adapter.event(params[0][i].params);
       }
-      callback([]);
+      callback(null);
     });
     server.on('event', function (err, params, callback) {
       adapter.log.verbose('RPC[' + adapter.options.namespace + ']: event called');
       clientUpdateConnection();
       adapter.event(params);
       if (typeof callback === 'function') {
-        callback();
+        callback(null);
       }
     });
     server.on('NotFound', function (err, params, callback) {
       adapter.log.warn('RPC[' + adapter.options.namespace + ']: "NotFound" occured on method ' + err);
       if (typeof callback === 'function') {
-        callback();
+        callback(null);
       }
     });
    }

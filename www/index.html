@@ -5,37 +5,10 @@
     <title>HMSRV</title>
     <meta name="description" content="" />
     <meta name="viewport" content="width=device-width" />
-
-    <!-- <link rel="stylesheet" type="text/css" href="components/datatables/media/css/jquery.dataTables.css" /> -->
-    <link rel="stylesheet" type="text/css" href="components/bootstrap.min.css" />
     <link rel="stylesheet" type="text/css" href="css/hmsrv.css" />
-  </head>
-  <body ng-app="hmsrvApp">
-    <!-- Fixed navbar -->
-    <nav class="navbar navbar-default navbar-static-top" ng-controller="projectName">
-      <div class="container">
-        <div class="navbar-header">
-          <a id="server" class="navbar-brand {{class}}">{{ projectName }}</a>
-        </div>
-        <div id="navbar" class="navbar-collapse collapse">
-          <ul class="nav navbar-nav">
-            <li class="{{homeClass}}"><a href="#/home">Home</a></li>
-            <li class="{{dataClass}}"><a href="#/data">Data</a></li>
-            <li class="{{graphsClass}}"><a href="#/graphs">Graphs</a></li>
-            <li class="{{administrationClass}}"><a href="#/administration">Administration</a></li>
-          </ul>
-        </div>
-      </div>
-    </nav>
-    <div class="container">
-      <ng-view></ng-view>
-    </div>
-    <!-- scripts -->
-    <script src="components/jquery.min.js"></script>
-    <script src="components/angular.min.js"></script>
-    <script src="components/angular-route.min.js"></script>
-    <script src="components/bootstrap.min.js"></script>
     <script src="components/socket.io.js"></script>
     <script src="js/index.js"></script>
+  </head>
+  <body>
   </body>
 </html>

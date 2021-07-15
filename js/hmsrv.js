@@ -196,13 +196,13 @@ function setupServer() {
   httpsServer.listen(port);
 
   // websocket server
-  io = socketio.listen(httpsServer);
+  io = socketio(httpsServer);
 
   io.on('connection', function (socket) {
     webSockets.push(socket);
-    log.info('HMSRV: websocket: %s successfully connected', socket.handshake.address);
+    log.info(`HMSRV: websocket: ${socket.handshake.address} successfully connected`);
     socket.on('disconnect', function (/*socket*/) {
-      log.info('HMSRV: websocket: %s disconnected', this.handshake.address);
+      log.info(`HMSRV: websocket: ${this.handshake.address} disconnected`);
     });
     socket.on('system', function (data) {
       var msg = JSON.parse(data).msg;

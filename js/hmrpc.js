@@ -139,7 +139,7 @@ function HomematicRpc(adapter) {
   function clientConnect() {
     return new Promise(function(resolve, reject) {
       adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientConnect()');
-      adapter.log.info('RPC[' + adapter.options.namespace + ']: connecting cient on ' + adapter.options.ccuIp + ':' + parseInt(adapter.options.ccuPort, 10) + '...');
+      adapter.log.info('RPC[' + adapter.options.namespace + ']: connecting client on ' + adapter.options.ccuIp + ':' + parseInt(adapter.options.ccuPort, 10) + '...');
       if (!client) {
         client = rpc.createClient({host: adapter.options.ccuIp, port: parseInt(adapter.options.ccuPort, 10)});
       }

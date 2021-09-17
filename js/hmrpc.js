@@ -9,7 +9,7 @@ function HomematicRpc(adapter) {
   let clientConnectIntervalHandle = null;
   const clientConnectInterval = adapter.options.clientConnectInterval || 30;
   let clientKeepAliveIntervalHandle = null;
-  const clientKeepAliveInterval = adapter.options.clientKeepAliveInterval || 60;
+  const clientKeepAliveInterval = adapter.options.clientKeepAliveInterval || 300;
   let clientInitSuccessful = false;
   let lastEvent = 0;
   let stop = false;
@@ -68,7 +68,7 @@ function HomematicRpc(adapter) {
       });
       server.on('system.multicall', function (err, params, callback) {
         adapter.log.verbose('RPC[' + adapter.options.namespace + ']: system.multicall called');
-        // clientUpdateConnection();
+        clientUpdateConnection();
         for (var i in params[0]) {
           adapter.event(params[0][i].params);
         }
@@ -76,7 +76,7 @@ function HomematicRpc(adapter) {
       });
       server.on('event', function (err, params, callback) {
         adapter.log.verbose('RPC[' + adapter.options.namespace + ']: event called');
-        // clientUpdateConnection();
+        clientUpdateConnection();
         adapter.event(params);
         if (typeof callback === 'function') {
           callback(null);
@@ -253,10 +253,10 @@ function HomematicRpc(adapter) {
       }
       var now = new Date().getTime();
       if (!lastEvent || (now - lastEvent) > clientKeepAliveInterval * 1000) {
-        clientConnect();
+        // clientConnect();
+        clientPing();
       }
       else {
-        clientPing();
       }
     }
   }

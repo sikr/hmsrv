@@ -31,57 +31,64 @@ function HomematicRpc(adapter) {
    *
    */
   this.start = function() {
-    adapter.log.debug('RPC[' + adapter.options.namespace + ']: start()');
-    if (server) {
-      adapter.log.warn('RPC[' + adapter.options.namespace + ']: server already up.');
-      return;
-    }
-
-    // start server
-    serverStart();
-
-    // connect client
-    clientConnect();
+    return new Promise(function(resolve, reject) {
+      adapter.log.debug('RPC[' + adapter.options.namespace + ']: start()');
+      if (server) {
+        adapter.log.warn('RPC[' + adapter.options.namespace + ']: server already up.');
+        return;
+      }
+      // Promise.all([serverStart, clientConnect])
+      serverStart()
+      .then(() => {
+        clientConnect()
+        .then(() => {
+          resolve();
+        })
+      })
+    });
   };
 
   /****************************************************************************
    *
    *
    */
-   function serverStart() {
-    adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStart()');
-    server = rpc.createServer({host: adapter.options.localIp, port: parseInt(adapter.options.localPort, 10)});
-    adapter.log.info('RPC[' + adapter.options.namespace + ']: server listening on ' + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10));
+  function serverStart() {
+    return new Promise(function(resolve, reject) {
+      adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStart()');
+      server = rpc.createServer({host: adapter.options.localIp, port: parseInt(adapter.options.localPort, 10)});
+      adapter.log.info('RPC[' + adapter.options.namespace + ']: server listening on ' + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10));
 
-    server.on('system.listMethods', function (err, params, callback) {
-      adapter.log.info('RPC[' + adapter.options.namespace + ']: system.listMethods called');
-      callback(null, ['event', 'listDevices', /*'newDevices', */'system.listMethods', 'system.multicall']);
-    });
-    server.on('listDevices', function (err, params, callback) {
-      adapter.log.info('RPC[' + adapter.options.namespace + ']: listDevices called, params: ' + JSON.stringify(params));
-      callback(null);
-    });
-    server.on('system.multicall', function (err, params, callback) {
-      adapter.log.verbose('RPC[' + adapter.options.namespace + ']: system.multicall called');
-      clientUpdateConnection();
-      for (var i in params[0]) {
-        adapter.event(params[0][i].params);
-      }
-      callback(null);
-    });
-    server.on('event', function (err, params, callback) {
-      adapter.log.verbose('RPC[' + adapter.options.namespace + ']: event called');
-      clientUpdateConnection();
-      adapter.event(params);
-      if (typeof callback === 'function') {
+      server.on('system.listMethods', function (err, params, callback) {
+        adapter.log.info('RPC[' + adapter.options.namespace + ']: system.listMethods called');
+        callback(null, ['event', 'listDevices', /*'newDevices', */'system.listMethods', 'system.multicall']);
+      });
+      server.on('listDevices', function (err, params, callback) {
+        adapter.log.info('RPC[' + adapter.options.namespace + ']: listDevices called, params: ' + JSON.stringify(params));
         callback(null);
-      }
-    });
-    server.on('NotFound', function (err, params, callback) {
-      adapter.log.warn('RPC[' + adapter.options.namespace + ']: "NotFound" occured on method ' + err);
-      if (typeof callback === 'function') {
+      });
+      server.on('system.multicall', function (err, params, callback) {
+        adapter.log.verbose('RPC[' + adapter.options.namespace + ']: system.multicall called');
+        // clientUpdateConnection();
+        for (var i in params[0]) {
+          adapter.event(params[0][i].params);
+        }
         callback(null);
-      }
+      });
+      server.on('event', function (err, params, callback) {
+        adapter.log.verbose('RPC[' + adapter.options.namespace + ']: event called');
+        // clientUpdateConnection();
+        adapter.event(params);
+        if (typeof callback === 'function') {
+          callback(null);
+        }
+      });
+      server.on('NotFound', function (err, params, callback) {
+        adapter.log.warn('RPC[' + adapter.options.namespace + ']: "NotFound" occured on method ' + err);
+        if (typeof callback === 'function') {
+          callback(null);
+        }
+      });
+      resolve();
     });
    }
 
@@ -90,34 +97,39 @@ function HomematicRpc(adapter) {
    *
    */
   function serverStop() {
-    adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStop()');
-    if (server) {
-      try {
-        if (server.close) {
-          server.close(
-            function() {
-              adapter.log.info('RPC[' + adapter.options.namespace + ']: server shut down successful.');
-              // server.unref();
-            }
-          );
+    return new Promise(function(resolve, reject) {
+      adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStop()');
+      if (server) {
+        try {
+          if (server.close) {
+            server.close(
+              function() {
+                adapter.log.info('RPC[' + adapter.options.namespace + ']: server shut down successful.');
+                // server.unref();
+                resolve();
+              }
+            );
+          }
+          else if (server.server && server.server.close) {
+            server.server.close(
+              function() {
+                adapter.log.info('RPC[' + adapter.options.namespace + ']: server shut down successful.');
+                // server.unref();
+                resolve();
+              }
+            );
+          }
         }
-        else if (server.server && server.server.close) {
-          server.server.close(
-            function() {
-              adapter.log.info('RPC[' + adapter.options.namespace + ']: server shut down successful.');
-              // server.unref();
-            }
-          );
+        catch (err) {
+          adapter.log.warn('RPC[' + adapter.options.namespace + ']: server shut down failed: ' + err);
+          resolve();
         }
       }
-      catch (err) {
-        adapter.log.warn('RPC[' + adapter.options.namespace + ']: server shut down failed: ' + err);
+      if (client && client.socket && client.socket.destroy) {
+        // hm has destroy
+        client.socket.destroy();
       }
-    }
-    if (client && client.socket && client.socket.destroy) {
-      // hm has destroy
-      client.socket.destroy();
-    }
+    });
   }
 
   /****************************************************************************
@@ -125,17 +137,20 @@ function HomematicRpc(adapter) {
    *
    */
   function clientConnect() {
-    adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientConnect()');
-    adapter.log.info('RPC[' + adapter.options.namespace + ']: connecting cient on ' + adapter.options.ccuIp + ':' + parseInt(adapter.options.ccuPort, 10) + '...');
-    if (!client) {
-      client = rpc.createClient({host: adapter.options.ccuIp, port: parseInt(adapter.options.ccuPort, 10)});
-    }
-    if (!clientInitSuccessful) {
-      clientInit();
-    }
-    if (!clientConnectIntervalHandle) {
-      clientConnectIntervalHandle = setInterval(clientInit, clientConnectInterval * 1000);
-    }
+    return new Promise(function(resolve, reject) {
+      adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientConnect()');
+      adapter.log.info('RPC[' + adapter.options.namespace + ']: connecting cient on ' + adapter.options.ccuIp + ':' + parseInt(adapter.options.ccuPort, 10) + '...');
+      if (!client) {
+        client = rpc.createClient({host: adapter.options.ccuIp, port: parseInt(adapter.options.ccuPort, 10)});
+      }
+      if (!clientInitSuccessful) {
+        clientInit();
+      }
+      if (!clientConnectIntervalHandle) {
+        clientConnectIntervalHandle = setInterval(clientInit, clientConnectInterval * 1000);
+      }
+      resolve();
+    });
   }
 
   /****************************************************************************
@@ -170,27 +185,32 @@ function HomematicRpc(adapter) {
    *
    */
   function clientDisconnect() {
-    adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientDisconnect()');
-    if (client) {
-      const url = protocol + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10);
-      try {
-        client.methodCall('init', [url, ''],
-          function (err) {
-            if (err) {
-              clientConnected = false;
-              adapter.log.error('RPC[' + adapter.options.namespace + ']: disconnect failed: ' + err);
+    return new Promise(function(resolve, reject) {
+      adapter.log.debug(`RPC[${adapter.options.namespace}]: clientDisconnect()`);
+      if (client) {
+        const url = protocol + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10);
+        try {
+          client.methodCall('init', [url, ''],
+            function (err) {
+              if (err) {
+                clientConnected = false;
+                adapter.log.error(`RPC[${adapter.options.namespace}]: disconnect failed: ${err}`);
+              }
+              else {
+                clientConnected = false;
+                adapter.log.info(`RPC[${adapter.options.namespace}]: client disconnected successful.`);
+              }
+              resolve();
             }
-            else {
-              clientConnected = false;
-              adapter.log.info('RPC[' + adapter.options.namespace + ']: client disconnected successful.');
-            }
-          }
-        );
+          );
+        }
+        catch (err) {
+          adapter.log.error(`RPC[${adapter.options.namespace}]: (exception) disconnect failed: ${err}`);
+          resolve();
+        }
       }
-      catch (err) {
-        adapter.log.error('RPC[' + adapter.options.namespace + ']: (exception) disconnect failed: ' + err);
-      }
-    }
+      resolve();
+    });
   }
   
   /****************************************************************************
@@ -277,13 +297,20 @@ function HomematicRpc(adapter) {
     }
   }
   this.stop = function() {
-    stop = true;
-    adapter.log.debug('RPC[' + adapter.options.namespace + ']: stop()');
-    clientDisconnect();
-    serverStop();
-  };
+    return new Promise(function (resolve, reject) {
+      adapter.log.debug(`RPC[${adapter.options.namespace}]: stop()`);
+      stop = true;
+      clientDisconnect()
+      .then(() => {
+        adapter.log.debug("foo");
+        serverStop()
+        .then(() => {
+          resolve();
+        })
+      });
+    });
+  }
 }
-
 module.exports = {
   HomematicRpc: HomematicRpc
 };

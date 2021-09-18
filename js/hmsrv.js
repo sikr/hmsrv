@@ -608,7 +608,7 @@ function logEvent(event) {
           status = 'changed';
           dpValues[id] = {timestamp: timestamp, value: value};
         }
-        log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
+        // log.debug('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
         pushToWebSockets('update', {timestamp: timestamp, status: status, id: id, address: address, name: name, value: value});
         if (persistence[id] && persistence[id].graphite) {
           graphiteCacheValuesFull.push({
@@ -809,7 +809,7 @@ setupServer()
             for (i in dpIndex) {
               // log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
             }
-            log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
+            log.info('HMSRV: Data Point Index successfully built, ' + dpCount.toString() + ' entries.');
 
             setInterval(function() {
               flushGraphite();

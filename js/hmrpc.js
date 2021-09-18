@@ -9,7 +9,7 @@ function HomematicRpc(adapter) {
   let clientConnectIntervalHandle = null;
   const clientConnectInterval = adapter.options.clientConnectInterval || 30;
   let clientKeepAliveIntervalHandle = null;
-  const clientKeepAliveInterval = adapter.options.clientKeepAliveInterval || 300;
+  const clientKeepAliveInterval = adapter.options.clientKeepAliveInterval || 60;
   let clientInitSuccessful = false;
   let lastEvent = 0;
   let stop = false;
@@ -139,8 +139,8 @@ function HomematicRpc(adapter) {
   function clientConnect() {
     return new Promise(function(resolve, reject) {
       adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientConnect()');
-      adapter.log.info('RPC[' + adapter.options.namespace + ']: connecting client on ' + adapter.options.ccuIp + ':' + parseInt(adapter.options.ccuPort, 10) + '...');
       if (!client) {
+        adapter.log.info('RPC[' + adapter.options.namespace + ']: creating client on ' + adapter.options.ccuIp + ':' + parseInt(adapter.options.ccuPort, 10) + '...');
         client = rpc.createClient({host: adapter.options.ccuIp, port: parseInt(adapter.options.ccuPort, 10)});
       }
       if (!clientInitSuccessful) {
@@ -245,18 +245,18 @@ function HomematicRpc(adapter) {
    *
    */
   function clientKeepAlive() {
+    adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientKeepAlive()');
     if (!stop) {
-      adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientKeepAlive()');
       if (clientConnectIntervalHandle) {
         clearTimeout(clientConnectIntervalHandle);
         clientConnectIntervalHandle = null;
       }
       var now = new Date().getTime();
       if (!lastEvent || (now - lastEvent) > clientKeepAliveInterval * 1000) {
-        // clientConnect();
-        clientPing();
+        clientConnect();
       }
       else {
+        clientPing();
       }
     }
   }

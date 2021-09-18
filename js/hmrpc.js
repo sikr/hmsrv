@@ -159,24 +159,26 @@ function HomematicRpc(adapter) {
    */
   function clientInit() {
     adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientInit()');
-    const url = protocol + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10);
-    try {
-      client.methodCall('init', [url, adapter.options.namespace],
-        function (err) {
-          if (err) {
-            clientConnected = false;
-            adapter.log.error('RPC[' + adapter.options.namespace + ']: "init" failed: ' + err);
+    if (!clientConnected) {
+      const url = protocol + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10);
+      try {
+        client.methodCall('init', [url, adapter.options.namespace],
+          function (err) {
+            if (err) {
+              clientConnected = false;
+              adapter.log.error('RPC[' + adapter.options.namespace + ']: "init" failed: ' + err);
+            }
+            else {
+              clientInitSuccessful = true;
+              clientUpdateConnection();
+              adapter.log.info('RPC[' + adapter.options.namespace + ']: "init" client successful.');
+            }
           }
-          else {
-            clientInitSuccessful = true;
-            clientUpdateConnection();
-            adapter.log.info('RPC[' + adapter.options.namespace + ']: "init" client successful.');
-          }
-        }
-      );
-    }
-    catch (err) {
-      adapter.log.error('RPC[' + adapter.options.namespace + ']: (exception) "init" failed: ' + err);
+        );
+      }
+      catch (err) {
+        adapter.log.error('RPC[' + adapter.options.namespace + ']: (exception) "init" failed: ' + err);
+      }
     }
   }
 

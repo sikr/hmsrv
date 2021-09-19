@@ -31,8 +31,8 @@ var logger = {
   startTime: [],
 
   type: {
-    0: 'debug:   ',
-    1: 'verbose: ',
+    0: 'verbose: ',
+    1: 'debug:   ',
     2: 'info:    ',
     3: 'time:    ',
     4: 'warn:    ',
@@ -47,10 +47,10 @@ var logger = {
     });
     this.initialized = true;
   },
-  debug: function(message) {
+  verbose: function(message) {
     this.log(0, message);
   },
-  verbose: function(message) {
+  debug: function(message) {
     this.log(1, message);
   },
   info: function(message) {

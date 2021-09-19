@@ -31,8 +31,8 @@ function HomematicRpc(adapter) {
    *
    */
   this.start = function() {
+    adapter.log.debug('RPC[' + adapter.options.namespace + ']: start()');
     return new Promise(function(resolve, reject) {
-      adapter.log.debug('RPC[' + adapter.options.namespace + ']: start()');
       if (server) {
         adapter.log.warn('RPC[' + adapter.options.namespace + ']: server already up.');
         return;
@@ -53,8 +53,8 @@ function HomematicRpc(adapter) {
    *
    */
   function serverStart() {
+    adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStart()');
     return new Promise(function(resolve, reject) {
-      adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStart()');
       server = rpc.createServer({host: adapter.options.localIp, port: parseInt(adapter.options.localPort, 10)});
       adapter.log.info('RPC[' + adapter.options.namespace + ']: server listening on ' + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10));
 
@@ -67,7 +67,7 @@ function HomematicRpc(adapter) {
         callback(null);
       });
       server.on('system.multicall', function (err, params, callback) {
-        adapter.log.verbose('RPC[' + adapter.options.namespace + ']: system.multicall called');
+        adapter.log.debug(`RPC[${adapter.options.namespace}]: system.multicall called; ${params[0].length} events`);
         clientUpdateConnection();
         for (var i in params[0]) {
           adapter.event(params[0][i].params);
@@ -75,7 +75,7 @@ function HomematicRpc(adapter) {
         callback(null);
       });
       server.on('event', function (err, params, callback) {
-        adapter.log.verbose('RPC[' + adapter.options.namespace + ']: event called');
+        adapter.log.debug('RPC[' + adapter.options.namespace + ']: event called');
         clientUpdateConnection();
         adapter.event(params);
         if (typeof callback === 'function') {
@@ -97,8 +97,8 @@ function HomematicRpc(adapter) {
    *
    */
   function serverStop() {
+    adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStop()');
     return new Promise(function(resolve, reject) {
-      adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStop()');
       if (server) {
         try {
           if (server.close) {
@@ -137,8 +137,8 @@ function HomematicRpc(adapter) {
    *
    */
   function clientConnect() {
+    adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientConnect()');
     return new Promise(function(resolve, reject) {
-      adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientConnect()');
       if (!client) {
         adapter.log.info('RPC[' + adapter.options.namespace + ']: creating client on ' + adapter.options.ccuIp + ':' + parseInt(adapter.options.ccuPort, 10) + '...');
         client = rpc.createClient({host: adapter.options.ccuIp, port: parseInt(adapter.options.ccuPort, 10)});
@@ -159,7 +159,7 @@ function HomematicRpc(adapter) {
    */
   function clientInit() {
     adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientInit()');
-    if (!clientConnected) {
+    // if (!clientConnected) {
       const url = protocol + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10);
       try {
         client.methodCall('init', [url, adapter.options.namespace],
@@ -179,7 +179,7 @@ function HomematicRpc(adapter) {
       catch (err) {
         adapter.log.error('RPC[' + adapter.options.namespace + ']: (exception) "init" failed: ' + err);
       }
-    }
+    // }
   }
 
   /****************************************************************************
@@ -187,8 +187,8 @@ function HomematicRpc(adapter) {
    *
    */
   function clientDisconnect() {
+    adapter.log.debug(`RPC[${adapter.options.namespace}]: clientDisconnect()`);
     return new Promise(function(resolve, reject) {
-      adapter.log.debug(`RPC[${adapter.options.namespace}]: clientDisconnect()`);
       if (client) {
         const url = protocol + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10);
         try {
@@ -254,6 +254,9 @@ function HomematicRpc(adapter) {
         clientConnectIntervalHandle = null;
       }
       var now = new Date().getTime();
+
+      adapter.log.debug(`RPC[${adapter.options.namespace}]: last event is ${(now - lastEvent) / 1000} s ago...`);
+
       if (!lastEvent || (now - lastEvent) > clientKeepAliveInterval * 1000) {
         clientConnect();
       }
@@ -276,12 +279,13 @@ function HomematicRpc(adapter) {
           function (err/*, res*/) {
             if (err) {
               clientConnected = false;
+              clientInitSuccessful = false;
               adapter.log.error('RPC[' + adapter.options.namespace + ']: "ping" failed: ' + err);
               clientConnect();
             }
             else {
               clientConnected = true;
-              adapter.log.verbose('RPC[' + adapter.options.namespace + ']: "ping" successful.');
+              adapter.log.debug('RPC[' + adapter.options.namespace + ']: "ping" successful.');
             }
           }
         );
@@ -294,13 +298,14 @@ function HomematicRpc(adapter) {
       adapter.log.warn('RPC[' + adapter.options.namespace + ']: client not connected.');
       if (clientConnected) {
         clientConnected = false;
+        clientInitSuccessful = false;
         clientConnect();
       }
     }
   }
   this.stop = function() {
+    adapter.log.debug(`RPC[${adapter.options.namespace}]: stop()`);
     return new Promise(function (resolve, reject) {
-      adapter.log.debug(`RPC[${adapter.options.namespace}]: stop()`);
       stop = true;
       clientDisconnect()
       .then(() => {

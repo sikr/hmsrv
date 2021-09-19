@@ -568,11 +568,11 @@ function logEvent(event) {
     if (isNaN(value)) {
       if (typeof event[3] === 'boolean') {
         value = (event[3] === true)? 1 : 0;
-        log.debug('RPC: converted non numeric (boolean) to integer: ' + address + ', ' + name + ', ' + event[3] + ' -> ' + value);
+        log.verbose('RPC: converted non numeric (boolean) to integer: ' + address + ', ' + name + ', ' + event[3] + ' -> ' + value);
       }
       else {
         store = false;
-        log.debug('RPC: non numeric value: ' + address + ', ' + name + ', ' + event[3]);
+        log.verbose('RPC: non numeric value: ' + address + ', ' + name + ', ' + event[3]);
       }
     }
     if (store) {
@@ -584,7 +584,9 @@ function logEvent(event) {
       if (id !== undefined) {
 
         // hack to solve HM-ES-TX-WM overflow at 838860,7 Wh
+        var unadjustedValue = -1;
         if (parseInt(id, 10) === 3177) {
+          unadjustedValue = value;
           value += (8 * 838860.7) +
             248945 +
             222000 +
@@ -608,8 +610,18 @@ function logEvent(event) {
           status = 'changed';
           dpValues[id] = {timestamp: timestamp, value: value};
         }
-        // log.debug('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
-        pushToWebSockets('update', {timestamp: timestamp, status: status, id: id, address: address, name: name, value: value});
+        
+        // console
+        log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
+
+        // websocket
+        var update = {timestamp: timestamp, status: status, id: id, address: address, name: name, value: value};
+        if (unadjustedValue !== -1) {
+          update.unadjustedValue = unadjustedValue;
+        }
+        pushToWebSockets('update', update);
+
+        // graphite
         if (persistence[id] && persistence[id].graphite) {
           graphiteCacheValuesFull.push({
             path: persistence[id].graphite.path,

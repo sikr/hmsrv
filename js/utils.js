@@ -18,16 +18,16 @@
 // return a local date in the format
 //   YYYY-MM-DD HH:MM:SS
 //
+function fill(n, m) {
+  var s = '';
+  while (n.length + s.length < m) {
+    s+= '0';
+  }
+  return s+n;
+};
+
 exports.getPrettyDate = function() {
   var d = new Date();
-  var s;
-  var fill = function(n, m) {
-    var s = '';
-    while (n.length + s.length < m) {
-      s+= '0';
-    }
-    return s+n;
-  };
 
   return fill( d.getFullYear()  .toString(), 4) + '-' +
          fill((d.getMonth() + 1).toString(), 2) + '-' +
@@ -43,14 +43,6 @@ exports.getPrettyDate = function() {
 //
 exports.getDate = function() {
   var d = new Date();
-  var s;
-  var fill = function(n, m) {
-    var s = '';
-    while (n.length + s.length < m) {
-      s+= '0';
-    }
-    return s+n;
-  };
 
   return fill( d.getFullYear()  .toString(), 4) +
          fill((d.getMonth() + 1).toString(), 2) +
@@ -70,4 +62,11 @@ exports.getHumanReadableTimeSpan = function(time1, time2) {
   delta -= minutes * 60;
   seconds = Math.round(delta);
   return days + ' days, ' + hours + ' hours, ' + minutes + ' minutes, ' + seconds + ' seconds';
+};
+exports.getHumanReadableTime = function(time) {
+
+  var d = new Date(time);
+  return fill( d.getHours()  .toString(), 2) + ":" +
+         fill( d.getMinutes().toString(), 2) + ":" +
+         fill( d.getSeconds().toString(), 2);
 };

@@ -615,7 +615,7 @@ function logEvent(event) {
         log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
 
         // websocket
-        var update = {timestamp: timestamp, status: status, id: id, address: address, name: name, value: value};
+        var update = {timestamp: timestamp, time: utils.getHumanReadableTime(timestamp), status: status, id: id, address: address, name: name, value: value};
         if (unadjustedValue !== -1) {
           update.unadjustedValue = unadjustedValue;
         }

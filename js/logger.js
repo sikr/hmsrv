@@ -97,7 +97,7 @@ var logger = {
     }
     else {
       if (this.options.log.file && level >= this.options.log.file.level) {
-        msgFile = utils.getPrettyDate();
+        msgFile = utils.getHumanReadableDateTime();
         msgFile += ' ' + this.type[level];
         msgFile += msg;
 
@@ -109,7 +109,7 @@ var logger = {
       }
 
       if (this.options.log.console  && level >= this.options.log.console.level) {
-        msgConsole = utils.getPrettyDate();
+        msgConsole = utils.getHumanReadableDateTime();
         msgConsole += ' ' + this.type[level];
         msgConsole += msg;
 

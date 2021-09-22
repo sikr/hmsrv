@@ -26,22 +26,11 @@ function fill(n, m) {
   return s+n;
 };
 
-exports.getPrettyDate = function() {
-  var d = new Date();
-
-  return fill( d.getFullYear()  .toString(), 4) + '-' +
-         fill((d.getMonth() + 1).toString(), 2) + '-' +
-         fill( d.getDate()      .toString(), 2) + ' ' +
-         fill( d.getHours()     .toString(), 2) + ':' +
-         fill( d.getMinutes()   .toString(), 2) + ':' +
-         fill( d.getSeconds()   .toString(), 2);
-};
-
 //
 // return a local date in the format
 //   YYYYMMDDHHMMSS
 //
-exports.getDate = function() {
+exports.getRawDateTime = function() {
   var d = new Date();
 
   return fill( d.getFullYear()  .toString(), 4) +
@@ -70,3 +59,20 @@ exports.getHumanReadableTime = function(time) {
          fill( d.getMinutes().toString(), 2) + ":" +
          fill( d.getSeconds().toString(), 2);
 };
+exports.getHumanReadableDateTime = function(time) {
+  var d;
+  if (time !== undefined) {
+    d = new Date(time);
+  }
+  else {
+    d = new Date();
+  }
+
+  return fill( d.getFullYear()  .toString(), 4) + '-' +
+         fill((d.getMonth() + 1).toString(), 2) + '-' +
+         fill( d.getDate()      .toString(), 2) + ' ' +
+         fill( d.getHours()     .toString(), 2) + ':' +
+         fill( d.getMinutes()   .toString(), 2) + ':' +
+         fill( d.getSeconds()   .toString(), 2);
+};
+

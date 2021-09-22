@@ -23,6 +23,7 @@
 'use strict';
 
 var fs = require ('fs');
+var fsp = require('fs').promises;
 
 if (!fs.existsSync(__dirname + '/options.json')) {
   console.error('File js/options.json is missing - copy js/options.dist.json to js/options.json and adapt to your ip adresses');
@@ -554,6 +555,10 @@ function setupFileSystem() {
   });
 } // setupFileSystem()
 
+async function storeLowBat(timestamp, address) {
+  await fsp.appendFile(`${directories.log}/lowbat.log`, `${timestamp} ${address}\n`);
+}
+
 function logEvent(event) {
   if (!stopping) {
     var timestamp = new Date().getTime();
@@ -634,6 +639,9 @@ function logEvent(event) {
         log.verbose('HMSRV: <unknown> ' + address + ', ' + name + ', ' + value);
       }
     }
+    if (name === "LOWBAT") {
+      storeLowBat(utils.getHumanReadableDateTime(timestamp), address);
+    }
   }
 } // logEvent()
 
@@ -674,7 +682,7 @@ function getSummary() {
          Math.round(stats.servedRequestSize/1024) + ' kBytes delivered\n' +
          'HMSRV is running in ' + stats.runMode + ' mode\n' +
          'Uptime: ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date()) + '\n' +
-         'Starttime ' + utils.getPrettyDate(stats.startTime) + '\n\n' +
+         'Starttime ' + utils.getHumanReadableDateTime(stats.startTime) + '\n\n' +
          'Cheers, HMSRV\n';
 } // getSummary()
 

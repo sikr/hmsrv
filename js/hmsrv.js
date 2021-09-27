@@ -439,7 +439,7 @@ function setupRpc() {
   return new Promise(function(resolve, reject) {
     var instances = [];
     for (var i = 0; i < (options.ccu.rpc.length-rpcNoCUxD); i++) {
-      hmrpc[i] = new Rpc.HomematicRpc({options: options.ccu.rpc[i], log: log, event: logEvent});
+      hmrpc[i] = new Rpc.HomematicRpc({options: options.ccu.rpc[i], instanceId: options.hmsrv.instanceId.value, runMode: stats.runMode.toLowerCase(), log: log, event: logEvent});
       instances.push(hmrpc[i]);
     }
     // Promise.all(instances)

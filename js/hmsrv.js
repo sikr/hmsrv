@@ -639,7 +639,7 @@ function logEvent(event) {
         log.verbose('HMSRV: <unknown> ' + address + ', ' + name + ', ' + value);
       }
     }
-    if (name === "LOWBAT") {
+    if (name === "LOWBAT" && value === 1) {
       storeLowBat(utils.getHumanReadableDateTime(timestamp), address, value);
     }
   }

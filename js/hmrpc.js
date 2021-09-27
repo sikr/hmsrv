@@ -162,7 +162,7 @@ function HomematicRpc(adapter) {
     // if (!clientConnected) {
       const url = protocol + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10);
       try {
-        client.methodCall('init', [url, adapter.options.namespace],
+        client.methodCall('init', [url, `${adapter.options.namespace}_${adapter.instanceId}_${adapter.runMode}`],
           function (err) {
             if (err) {
               clientConnected = false;

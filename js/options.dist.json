@@ -4,14 +4,18 @@
     "hmsrv": {
       "ip": "0.0.0.0",
       "httpsPort": 1443,
-      "productive": false
+      "productive": false,
+      "instanceId": {
+        "comment": "Used e. g. for RPC connect as unique identifier combined with run mode (development|test|production)",
+        "value": ""
+      }
     },
     "ccu": {
       "ip": "0.0.0.0",
       "rpc": [
         {
           "name": "Homematic Wireless",
-          "type": "bin",
+          "type": "xml",
           "port": 2001,
           "namespace": "hm",
           "ccuPort": 2001,
@@ -68,14 +72,18 @@
     "hmsrv": {
       "ip": "0.0.0.0",
       "httpsPort": 2443,
-      "productive": false
+      "productive": false,
+      "instanceId": {
+        "comment": "Used e. g. for RPC connect as unique identifier combined with run mode (development|test|production)",
+        "value": ""
+      }
     },
     "ccu": {
       "ip": "0.0.0.0",
       "rpc": [
         {
           "name": "Homematic Wireless",
-          "type": "bin",
+          "type": "xml",
           "port": 2001,
           "namespace": "hm",
           "ccuPort": 2001,
@@ -132,14 +140,18 @@
     "hmsrv": {
       "ip": "0.0.0.0",
       "httpsPort": 443,
-      "productive": true
+      "productive": true,
+      "instanceId": {
+        "comment": "Used e. g. for RPC connect as unique identifier combined with run mode (development|test|production)",
+        "value": ""
+      }
     },
     "ccu": {
       "ip": "0.0.0.0",
       "rpc": [
         {
           "name": "Homematic Wireless",
-          "type": "bin",
+          "type": "xml",
           "port": 2001,
           "namespace": "hm",
           "ccuPort": 2001,

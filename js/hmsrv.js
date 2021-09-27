@@ -555,8 +555,8 @@ function setupFileSystem() {
   });
 } // setupFileSystem()
 
-async function storeLowBat(timestamp, address) {
-  await fsp.appendFile(`${directories.log}/lowbat.log`, `${timestamp} ${address}\n`);
+async function storeLowBat(timestamp, address, value) {
+  await fsp.appendFile(`${directories.log}/lowbat.log`, `${timestamp} ${address}, ${value}\n`);
 }
 
 function logEvent(event) {
@@ -640,7 +640,7 @@ function logEvent(event) {
       }
     }
     if (name === "LOWBAT") {
-      storeLowBat(utils.getHumanReadableDateTime(timestamp), address);
+      storeLowBat(utils.getHumanReadableDateTime(timestamp), address, value);
     }
   }
 } // logEvent()

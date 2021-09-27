@@ -3,6 +3,7 @@ docs_and_pocs
 www/components
 data/*
 db/*
+git.pat
 hmsrv.sublime*
 js/____*
 js/options.json

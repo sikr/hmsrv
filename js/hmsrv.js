@@ -59,7 +59,18 @@ var stats       = {
   runMode: 'DEVELOPMENT',
   servedRequests: 0,
   servedRequestSize: 0,
-  hostname: os.hostname()
+  hostname: os.hostname(),
+  graphite: {
+    flushing: {
+      fail: 0,       // no of failed flush attempts
+      success: 0     // no of successful flush attempts
+    },
+    connection: {
+      error: 0,      // no of connection errors
+      success: 0,    // no of successful connect attempts
+      close: 0       // no of connection close events
+    }
+  }
 };
 
 //
@@ -501,6 +512,21 @@ function setupGraphite() {
 
       graphite.connect(function(err) {
       });
+
+      graphite.on("close", () => {
+        log.info("GRAPHITE: connection closed.");
+        stats.graphite.connection.close++;
+      });
+
+      graphite.on("connect", () => {
+        log.info("GRAPHITE: successfully connected.");
+        stats.graphite.connection.success++;
+      });
+
+      graphite.on("error", (err) => {
+        log.error("GRAPHITE: " + err);
+        stats.graphite.connection.error++;
+      });
     }
     else {
       log.warn('Incomplete Graphite config');
@@ -526,15 +552,38 @@ function flushGraphite() {
       var graphiteValues = graphiteCacheValuesFull;
       graphiteCacheValuesFull = [];
 
-      graphite.send(graphiteValues, function() {
-        log.info('GRAPHITE: ' + graphiteValues.length + ' values flushed');
+      graphite.send(graphiteValues)
+      .then(() => {
+        log.info(`GRAPHITE: ${graphiteValues.length} values flushed`);
+        stats.graphite.flushing.success++;
+        resolve();
+      })
+      .catch((msg) => {
+        log.error(`GRAPHITE: flush failed: ${msg}`);
+
+        // new metrics may have emerged while flushing
+        if (graphiteCacheValuesFull.length > 0) {
+          // in this case merge old and new metrics
+          var allValues = [...graphiteCacheValuesFull, ...graphiteValues];
+          graphiteValues = allValues;
+        }
+        else {
+          // nothing new since
+          graphiteCacheValuesFull = graphiteValues;
+        }
+        stats.graphite.flushing.fail++;
       });
+
     }
     else {
-      log.info('Graphite: nothing to flush');
+      log.info('GRAPHITE: nothing to flush');
+      resolve();
     }
-    resolve();
   }); //flushGraphite()
+}
+
+function stopGraphite() {
+  graphite.close();
 }
 
 
@@ -716,6 +765,7 @@ function shutdown(params) {
       .then(() => {
         flushGraphite()
         .then(() => {
+          stopGraphite();
           log.info("Gracefully shutdown HMSRV. Bye.");
           process.exit(0);
         })
@@ -726,13 +776,8 @@ function shutdown(params) {
       })
       .catch(() => {
         log.info("stopRPC failed during HMSRV shutdown. Exiting anyway. Bye.");
-        process.exit(1);
+        process.exit(2);
       });
-    // })
-    // .catch(() => {
-    //   log.info("stopCron failed during HMSRV shutdown. Exiting anyway. Bye.");
-    //   process.exit(2);
-    // });
   }
 } //shutdown()
 
@@ -844,36 +889,4 @@ setupServer()
     })
   })
 })
-
-// setupServer();
-// setupRega();
-
-// setupFileSystem(function () {
-//   setupGraphite(function() {
-//     loadRegaData(function() {
-//       setupRpc(options.ccu.rpc, function() {
-
-//         var dpCount = 0;
-//         // build datapoint Index name <> id
-//         for (var i in datapoints) {
-//           dpIndex[unescape(datapoints[i].Name)] = i;
-//           dpCount++;
-//         }
-//         for (i in dpIndex) {
-//           // log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
-//         }
-//         log.info('HMSRV: dpIndex successfully build, ' + dpCount.toString() + ' entries.');
-
-//         setInterval(function() {
-//           flushGraphite();
-//         }, nFlushInterval * 1000);
-
-//         // setupCron();
-
-//         log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
-//       });
-//     });
-//   });
-// });
-
 })();

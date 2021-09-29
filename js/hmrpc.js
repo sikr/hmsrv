@@ -99,13 +99,15 @@ function HomematicRpc(adapter) {
   function serverStop() {
     adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStop()');
     return new Promise(function(resolve, reject) {
+      if (client && client.socket && client.socket.destroy) {
+        client.socket.destroy();
+      }
       if (server) {
         try {
           if (server.close) {
             server.close(
               function() {
                 adapter.log.info('RPC[' + adapter.options.namespace + ']: server shut down successful.');
-                // server.unref();
                 resolve();
               }
             );
@@ -114,7 +116,6 @@ function HomematicRpc(adapter) {
             server.server.close(
               function() {
                 adapter.log.info('RPC[' + adapter.options.namespace + ']: server shut down successful.');
-                // server.unref();
                 resolve();
               }
             );
@@ -122,12 +123,8 @@ function HomematicRpc(adapter) {
         }
         catch (err) {
           adapter.log.warn('RPC[' + adapter.options.namespace + ']: server shut down failed: ' + err);
-          resolve();
+          reject();
         }
-      }
-      if (client && client.socket && client.socket.destroy) {
-        // hm has destroy
-        client.socket.destroy();
       }
     });
   }
@@ -309,7 +306,6 @@ function HomematicRpc(adapter) {
       stop = true;
       clientDisconnect()
       .then(() => {
-        adapter.log.debug("foo");
         serverStop()
         .then(() => {
           resolve();

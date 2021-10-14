@@ -304,20 +304,20 @@ function writeRegaDataToFile(resolve, reject) {
   function write(fileName) {
     if (fileName) {
       var mode = (stats.runMode !== 'PRODUCTION')? '.' + stats.runMode.toLowerCase() : '';
-      var fullPath = __dirname + '/../data/' + fileName + mode + '.json';
+      var fullPath = __dirname + '/../data/' + fileName + '.json';
       var data;
       switch (fileName) {
         case 'channels':
-          data = JSON.stringify(channels);
+          data = JSON.stringify(channels, null, 2);
           break;
         case 'datapoints' :
-          data = JSON.stringify(datapoints);
+          data = JSON.stringify(datapoints, null, 2);
           break;
         case 'devices' :
-          data = JSON.stringify(devices);
+          data = JSON.stringify(devices, null, 2);
           break;
         case 'rooms' :
-          data = JSON.stringify(rooms);
+          data = JSON.stringify(rooms, null, 2);
           break;
         default:
           log.error('HMSRV: error writing rega data to file, unknown file: ' + fullPath);

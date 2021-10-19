@@ -35,6 +35,8 @@ var mail        = require('./mail.js');
 var utils       = require('./utils');
 var optionsFile = require('./options.json');
 var persistence = require('../data/persistence.json');
+var lowbat      = require('../data/lowbat.json');
+var offset      = require('../data/offset.json');
 var options     = null;
 var CronJob     = require('cron').CronJob;
 var summaryJob  = null;
@@ -103,7 +105,7 @@ var devices    = {};
 var channels   = {};
 var datapoints = {};
 var rooms      = {};
-var dpIndex    = {}; // index of homematic adress > homeatic id
+var dpIndex    = {}; // address > id, e. g. "BidCos-RF.NEQ0123228:1.TEMPERATURE" > "3991"
 var dpValues   = []; // latest datapoint values to identify changes
 
 var nFlushInterval = 60; // flush once a minute to graphite
@@ -304,7 +306,7 @@ function writeRegaDataToFile(resolve, reject) {
   function write(fileName) {
     if (fileName) {
       var mode = (stats.runMode !== 'PRODUCTION')? '.' + stats.runMode.toLowerCase() : '';
-      var fullPath = __dirname + '/../data/' + fileName + '.json';
+      var fullPath = __dirname + '/../data/' + fileName + mode + '.json';
       var data;
       switch (fileName) {
         case 'channels':
@@ -604,8 +606,70 @@ function setupFileSystem() {
   });
 } // setupFileSystem()
 
-async function storeLowBat(timestamp, address, value) {
-  await fsp.appendFile(`${directories.log}/lowbat.log`, `${timestamp} ${address}, ${value}\n`);
+function handleLowBat(id, status) {
+  let channel = channels[datapoints[id].Parent];
+  let deviceId = channel.Parent;
+  let event, before;
+  let modified = false;
+
+  datapoints[id].Value = status;
+  if (status === true) {
+    if (!lowbat[deviceId]) {
+      // device not yet listed in lowbat.json
+      lowbat[deviceId] = {
+        events: []
+      };
+    }
+    event = lowbat[deviceId].events[lowbat[deviceId].events.length-1];
+    if (!event || event.replacement !== '') {
+      // new lowbat event
+      lowbat[deviceId].events.push({
+        'replacement': '',
+        'duration': ''
+      });
+      modified = true;
+    }
+  }
+  else {
+    if (lowbat[deviceId] && lowbat[deviceId].events) {
+      event = lowbat[deviceId].events[lowbat[deviceId].events.length-1];
+      before = lowbat[deviceId].events[lowbat[deviceId].events.length-2];
+      if (event && event.replacement === '') {
+        // battery replaced
+        event.replacement = new Date().toISOString();
+        if (before) {
+          event.duration = utils.getHumanReadableTimeSpan(
+            new Date(event.replacement), new Date( before.replacement)
+          );
+        }
+        modified = true;
+      }
+    }
+  }
+  if (modified) {
+    fs.writeFile('../data/lowbat.json', JSON.stringify(lowbat, null, 2), (err) => {
+      if (err) {
+        log.error(`HMSRV: error writing lowbat.json - ${err}`);
+      }
+    });
+  }
+}
+
+function getOffset(datapoint) {
+  var sum = 0;
+
+  try {
+    if (offset[datapoint] && offset[datapoint].events) {
+      let events = offset[datapoint].events;
+      for (var i in events) {
+        sum += events[i].value;
+      }
+    }
+  }
+  catch(err) {
+    log.error(`Error calculating offset for datapoint ${datapoint}`);
+  }
+  return sum;
 }
 
 function logEvent(event) {
@@ -638,19 +702,12 @@ function logEvent(event) {
       if (id !== undefined) {
 
         // hack to solve HM-ES-TX-WM overflow at 838860,7 Wh
+        var datapoint = parseInt(id, 10);
         var unadjustedValue = -1;
-        if (parseInt(id, 10) === 3177) {
+        if (datapoint === 3177) {
           unadjustedValue = value;
-          value += (8 * 838860.7) +
-            248945 +
-            222000 +
-            323006 +
-            206939.30 +
-            576987 +    // battery replacement
-            409353 +    // battery replacement 2020-04-28
-            606472.60 + // battery replacement 2020-12-30
-            179520 +    // ancient offset from grafana
-            656032.60   // battery replacement 2021-08-28
+          var offset = getOffset(datapoint);
+          value += offset;
         }
         status = '';
         if (dpValues[id] === undefined) {
@@ -688,8 +745,8 @@ function logEvent(event) {
         log.verbose('HMSRV: <unknown> ' + address + ', ' + name + ', ' + value);
       }
     }
-    if (name === "LOWBAT" && value === 1) {
-      storeLowBat(utils.getHumanReadableDateTime(timestamp), address, value);
+    if (name === 'LOWBAT') {
+      handleLowBat(id, event[3]);
     }
   }
 } // logEvent()
@@ -750,7 +807,7 @@ process.on("uncaughtException", function(err) {
     log.error(msg);
     shutdown.bind(null, {event: 'uncaughtException'});
   } catch (e) {
-    // ...?
+    process.exit(1100);
   }
 });
 
@@ -758,6 +815,15 @@ function shutdown(params) {
   if (!stopping) {
     stopping = true;
     log.info('HMSRV: "' + params.event + '", shutting down...');
+
+    var mode = (stats.runMode !== 'PRODUCTION')? '.' + stats.runMode.toLowerCase() : '';
+    var data = JSON.stringify(datapoints, null, 2);
+    var fullPath = __dirname + '/../data/datapoints' + mode + '.json'
+    fs.writeFile(fullPath, data, function(err) {
+      if (err) {
+        log.error('HMSRV: error writing datapoints to file: ' + fullPath);
+      }
+    });
 
     // stopCron()
     // .then(() => {
@@ -771,12 +837,12 @@ function shutdown(params) {
         })
         .catch(() => {
           log.info("flushGraphite failed during HMSRV shutdown. Exiting anyway. Bye.");
-          process.exit(1);
+          process.exit(1001);
         });
       })
       .catch(() => {
         log.info("stopRPC failed during HMSRV shutdown. Exiting anyway. Bye.");
-        process.exit(2);
+        process.exit(1002);
       });
   }
 } //shutdown()
@@ -870,9 +936,6 @@ setupServer()
             for (var i in datapoints) {
               dpIndex[unescape(datapoints[i].Name)] = i;
               dpCount++;
-            }
-            for (i in dpIndex) {
-              // log.verbose('HMSRV: dpIndex[' + i + '] = ' + dpIndex[i]);
             }
             log.info('HMSRV: Data Point Index successfully built, ' + dpCount.toString() + ' entries.');
 

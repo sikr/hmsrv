@@ -23,7 +23,6 @@
 'use strict';
 
 var fs = require ('fs');
-var fsp = require('fs').promises;
 
 if (!fs.existsSync(__dirname + '/options.json')) {
   console.error('File js/options.json is missing - copy js/options.dist.json to js/options.json and adapt to your ip adresses');
@@ -31,15 +30,15 @@ if (!fs.existsSync(__dirname + '/options.json')) {
 }
 
 var log         = require('./logger.js');
-var mail        = require('./mail.js');
+// var mail        = require('./mail.js');
 var utils       = require('./utils');
 var optionsFile = require('./options.json');
 var persistence = require('../data/persistence.json');
 var lowbat      = require('../data/lowbat.json');
 var offset      = require('../data/offset.json');
 var options     = null;
-var CronJob     = require('cron').CronJob;
-var summaryJob  = null;
+// var CronJob     = require('cron').CronJob;
+// var summaryJob  = null;
 // var assert      = require('assert');
 var os          = require('os');
 
@@ -81,7 +80,7 @@ var stats       = {
 var Rega        = require('./rega.js');
 var regaData    = ['channels', 'datapoints', 'devices', 'rooms'];
 var regaHss;
-var regaUp      = false;
+// var regaUp      = false;
 
 //
 // RPC
@@ -109,16 +108,14 @@ var dpIndex    = {}; // address > id, e. g. "BidCos-RF.NEQ0123228:1.TEMPERATURE"
 var dpValues   = []; // latest datapoint values to identify changes
 
 var nFlushInterval = 60; // flush once a minute to graphite
-var countValues = 0;
-var countValuesFull = 0;
+// var countValues = 0;
+// var countValuesFull = 0;
 
 var Graphite = require('./graphite.js');
 var graphite;
 var graphiteCacheValuesFull = [];
 
 var stopping = false;
-var shutdownCount = 0;
-
 
 /******************************************************************************
  *
@@ -126,7 +123,7 @@ var shutdownCount = 0;
  *
  */
 function setupServer() {
-  return new Promise(function(resolve, reject) {
+  return new Promise(function(resolve) {
     var response = '';
 
     // static content webserver
@@ -247,8 +244,8 @@ function pushToWebSockets(method, message) {
  * REGA
  *
  */
-function setupRega(callback) {
-  return new Promise(function(resolve, reject) {
+function setupRega() {
+  return new Promise(function(resolve) {
     regaHss = new Rega({
       ccuIp: options.ccu.ip,
       ready: function() {
@@ -295,7 +292,7 @@ function loadRegaData() {
   });
 } // loadRegaData()
 
-function writeRegaDataToFile(resolve, reject) {
+function writeRegaDataToFile(resolve) {
   var _regaData = [];
   var i;
 
@@ -449,7 +446,7 @@ function loadRegaDataFromCCU(index) {
  *
  */
 function setupRpc() {
-  return new Promise(function(resolve, reject) {
+  return new Promise(function(resolve) {
     var instances = [];
     for (var i = 0; i < (options.ccu.rpc.length-rpcNoCUxD); i++) {
       hmrpc[i] = new Rpc.HomematicRpc({options: options.ccu.rpc[i], instanceId: options.hmsrv.instanceId.value, runMode: stats.runMode.toLowerCase(), log: log, event: logEvent});
@@ -487,11 +484,11 @@ function stopRpc() {
       .then(() => {
         resolve();
       })
-      .catch((error) => {
+      .catch(() => {
         reject();
       })
     })
-    .catch((error) => {
+    .catch(() => {
       reject();
     })
   }); // stopRpc()
@@ -503,7 +500,7 @@ function stopRpc() {
  *
  */
 function setupGraphite() {
-  return new Promise(function (resolve, reject) {
+  return new Promise(function (resolve) {
     if (checkGraphiteConfig()) {
       var _options = {
         ip: options.graphite.ip,
@@ -512,7 +509,7 @@ function setupGraphite() {
       };
       graphite = new Graphite(_options);
 
-      graphite.connect(function(err) {
+      graphite.connect(function() {
       });
 
       graphite.on("close", () => {
@@ -549,7 +546,7 @@ function checkGraphiteConfig() {
 } // checkGraphiteConfig()
 
 function flushGraphite() {
-  return new Promise(function(resolve, reject) {
+  return new Promise(function(resolve) {
     if (graphiteCacheValuesFull.length > 0) {
       var graphiteValues = graphiteCacheValuesFull;
       graphiteCacheValuesFull = [];
@@ -595,7 +592,7 @@ function stopGraphite() {
  *
  */
 function setupFileSystem() {
-  return new Promise(function(resolve, reject) {
+  return new Promise(function(resolve) {
     // verify that all directories exist
     for (var i in directories) {
       if (!fs.existsSync(directories[i])) {
@@ -771,41 +768,41 @@ function logEvent(event) {
  * Cron
  *
  */
-function setupCron() {
-  return new Promise(function(resolve, reject) {
-    summaryJob = new CronJob({
-      cronTime: '0 0 12 * * 0-6',
-      onTick:  function () {
-        // mail.send('hmsrv summary', getSummary(), function() {
-        // });
-        countValues = 0;
-        countValuesFull = 0;
-      },
-      start: true
-    });
-    resolve();
-  });
-} // setupCron()
+// function setupCron() {
+//   return new Promise(function(resolve, reject) {
+//     summaryJob = new CronJob({
+//       cronTime: '0 0 12 * * 0-6',
+//       onTick:  function () {
+//         // mail.send('hmsrv summary', getSummary(), function() {
+//         // });
+//         countValues = 0;
+//         countValuesFull = 0;
+//       },
+//       start: true
+//     });
+//     resolve();
+//   });
+// } // setupCron()
 
-function stopCron() {
-  return new Promise(function(resolve, reject) {
-    summaryJob.stop();
-    resolve();
-  });
-} // stopCron()
+// function stopCron() {
+//   return new Promise(function(resolve, reject) {
+//     summaryJob.stop();
+//     resolve();
+//   });
+// } // stopCron()
 
-function getSummary() {
-  return 'Hi!\n\n' +
-         'This is the HMSRV summary for today:\n\n' +
-         countValues + ' values written to table VALUES\n' +
-         countValuesFull + ' values written to table VALUESFULL\n' +
-         stats.servedRequests + ' requests handled\n' +
-         Math.round(stats.servedRequestSize/1024) + ' kBytes delivered\n' +
-         'HMSRV is running in ' + stats.runMode + ' mode\n' +
-         'Uptime: ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date()) + '\n' +
-         'Starttime ' + utils.getHumanReadableDateTime(stats.startTime) + '\n\n' +
-         'Cheers, HMSRV\n';
-} // getSummary()
+// function getSummary() {
+//   return 'Hi!\n\n' +
+//          'This is the HMSRV summary for today:\n\n' +
+//          countValues + ' values written to table VALUES\n' +
+//          countValuesFull + ' values written to table VALUESFULL\n' +
+//          stats.servedRequests + ' requests handled\n' +
+//          Math.round(stats.servedRequestSize/1024) + ' kBytes delivered\n' +
+//          'HMSRV is running in ' + stats.runMode + ' mode\n' +
+//          'Uptime: ' + utils.getHumanReadableTimeSpan(stats.startTime, new Date()) + '\n' +
+//          'Starttime ' + utils.getHumanReadableDateTime(stats.startTime) + '\n\n' +
+//          'Cheers, HMSRV\n';
+// } // getSummary()
 
 //
 // ensure graceful shutdown

@@ -609,7 +609,8 @@ function setupFileSystem() {
 function handleLowBat(id, status) {
   let channel = channels[datapoints[id].Parent];
   let deviceId = channel.Parent;
-  let event, before;
+  let event, date;
+  let now = new Date();
   let modified = false;
 
   datapoints[id].Value = status;
@@ -622,26 +623,40 @@ function handleLowBat(id, status) {
     }
     event = lowbat[deviceId].events[lowbat[deviceId].events.length-1];
     if (!event || event.replacement !== '') {
-      // new lowbat event
-      lowbat[deviceId].events.push({
-        'replacement': '',
-        'duration': ''
-      });
-      modified = true;
+      if (event) {
+        date = new Date(event.replacement);
+      }
+      /*
+       * Some devices seem to have a lowbat true/false jitter, so only
+       * lowbat=false events lasting for more than 1 days are presereved
+       */
+      if (date && now.valueOf() - date.valueOf() < 86400000) {
+        let diff = now.valueOf() - date.valueOf();
+        console.log(`diff: ${diff}`)
+        // discard jitter
+        event.replacement = '';
+        modified = false;
+      }
+      else {
+        // calc battery duration
+        if (event && date) {
+          event.duration = utils.getHumanReadableTimeSpan(now, date);
+        }
+        // new lowbat event
+        lowbat[deviceId].events.push({
+          'replacement': '',
+          'duration': ''
+        });
+        modified = true;
+      }
     }
   }
   else {
     if (lowbat[deviceId] && lowbat[deviceId].events) {
       event = lowbat[deviceId].events[lowbat[deviceId].events.length-1];
-      before = lowbat[deviceId].events[lowbat[deviceId].events.length-2];
       if (event && event.replacement === '') {
         // battery replaced
-        event.replacement = new Date().toISOString();
-        if (before) {
-          event.duration = utils.getHumanReadableTimeSpan(
-            new Date(event.replacement), new Date( before.replacement)
-          );
-        }
+        event.replacement = now.toISOString();
         modified = true;
       }
     }

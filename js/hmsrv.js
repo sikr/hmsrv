@@ -556,7 +556,7 @@ function flushGraphite() {
 
       graphite.send(graphiteValues)
       .then(() => {
-        log.info(`GRAPHITE: ${graphiteValues.length} values flushed`);
+        log.debug(`GRAPHITE: ${graphiteValues.length} values flushed`);
         stats.graphite.flushing.success++;
         resolve();
       })
@@ -578,7 +578,7 @@ function flushGraphite() {
 
     }
     else {
-      log.info('GRAPHITE: nothing to flush');
+      log.debug('GRAPHITE: nothing to flush');
       resolve();
     }
   }); //flushGraphite()

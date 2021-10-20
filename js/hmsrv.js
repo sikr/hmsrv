@@ -216,14 +216,17 @@ function setupServer() {
         log.info(`HMSRV: websocket: ${this.handshake.address} disconnected`);
       });
       socket.on('system', function (data) {
-        var msg = JSON.parse(data).msg;
-        if (msg === 'shutdown') {
+        var cmd = JSON.parse(data).cmd;
+        if (cmd.call === 'shutdown') {
           shutdown({event: 'usershutdown'});
         }
         // else if (msg === 'mail') {
         //   mail.send('hmsrv test mail\n\n', getSummary(), function() {
         //   });
         // }
+        else if (cmd.call === 'handleLowBat') {
+          handleLowBat(cmd.datapoint, cmd.value)
+        }
         log.debug(data);
       });
       // socket.emit('ping');
@@ -628,11 +631,9 @@ function handleLowBat(id, status) {
        * lowbat=false events lasting for more than 1 days are presereved
        */
       if (date && now.valueOf() - date.valueOf() < 86400000) {
-        let diff = now.valueOf() - date.valueOf();
-        console.log(`diff: ${diff}`)
         // discard jitter
         event.replacement = '';
-        modified = false;
+        modified = true;
       }
       else {
         // calc battery duration

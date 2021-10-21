@@ -30,22 +30,14 @@ function HomematicRpc(adapter) {
    *
    *
    */
-  this.start = function() {
+  this.start = async function() {
     adapter.log.debug('RPC[' + adapter.options.namespace + ']: start()');
-    return new Promise(function(resolve, reject) {
-      if (server) {
-        adapter.log.warn('RPC[' + adapter.options.namespace + ']: server already up.');
-        return;
-      }
-      // Promise.all([serverStart, clientConnect])
-      serverStart()
-      .then(() => {
-        clientConnect()
-        .then(() => {
-          resolve();
-        })
-      })
-    });
+    if (server) {
+      adapter.log.warn('RPC[' + adapter.options.namespace + ']: server already up.');
+      return;
+    }
+    await serverStart();
+    await clientConnect()
   };
 
   /****************************************************************************
@@ -55,7 +47,13 @@ function HomematicRpc(adapter) {
   function serverStart() {
     adapter.log.debug('RPC[' + adapter.options.namespace + ']: serverStart()');
     return new Promise(function(resolve, reject) {
-      server = rpc.createServer({host: adapter.options.localIp, port: parseInt(adapter.options.localPort, 10)});
+      try {
+        server = rpc.createServer({host: adapter.options.localIp, port: parseInt(adapter.options.localPort, 10)});
+        resolve();
+      }
+      catch(err) {
+        reject();
+      }
       adapter.log.info('RPC[' + adapter.options.namespace + ']: server listening on ' + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10));
 
       server.on('system.listMethods', function (err, params, callback) {
@@ -88,7 +86,6 @@ function HomematicRpc(adapter) {
           callback(null);
         }
       });
-      resolve();
     });
    }
 
@@ -156,27 +153,25 @@ function HomematicRpc(adapter) {
    */
   function clientInit() {
     adapter.log.debug('RPC[' + adapter.options.namespace + ']: clientInit()');
-    // if (!clientConnected) {
-      const url = protocol + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10);
-      try {
-        client.methodCall('init', [url, `${adapter.options.namespace}_${adapter.instanceId}_${adapter.runMode}`],
-          function (err) {
-            if (err) {
-              clientConnected = false;
-              adapter.log.error('RPC[' + adapter.options.namespace + ']: "init" failed: ' + err);
-            }
-            else {
-              clientInitSuccessful = true;
-              clientUpdateConnection();
-              adapter.log.info('RPC[' + adapter.options.namespace + ']: "init" client successful.');
-            }
+    const url = protocol + adapter.options.localIp + ':' + parseInt(adapter.options.localPort, 10);
+    try {
+      client.methodCall('init', [url, `${adapter.options.namespace}_${adapter.instanceId}_${adapter.runMode}`],
+        function (err) {
+          if (err) {
+            clientConnected = false;
+            adapter.log.error('RPC[' + adapter.options.namespace + ']: "init" failed: ' + err);
           }
-        );
-      }
-      catch (err) {
-        adapter.log.error('RPC[' + adapter.options.namespace + ']: (exception) "init" failed: ' + err);
-      }
-    // }
+          else {
+            clientInitSuccessful = true;
+            clientUpdateConnection();
+            adapter.log.info('RPC[' + adapter.options.namespace + ']: "init" client successful.');
+          }
+        }
+      );
+    }
+    catch (err) {
+      adapter.log.error('RPC[' + adapter.options.namespace + ']: (exception) "init" failed: ' + err);
+    }
   }
 
   /****************************************************************************
@@ -300,18 +295,11 @@ function HomematicRpc(adapter) {
       }
     }
   }
-  this.stop = function() {
+  this.stop = async function() {
     adapter.log.debug(`RPC[${adapter.options.namespace}]: stop()`);
-    return new Promise(function (resolve, reject) {
-      stop = true;
-      clientDisconnect()
-      .then(() => {
-        serverStop()
-        .then(() => {
-          resolve();
-        })
-      });
-    });
+    stop = true;
+    await clientDisconnect();
+    await serverStop()
   }
 }
 module.exports = {

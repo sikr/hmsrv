@@ -23,6 +23,7 @@
 'use strict';
 
 var fs = require ('fs');
+var fsp = require ('fs/promises');
 
 if (!fs.existsSync(__dirname + '/options.json')) {
   console.error('File js/options.json is missing - copy js/options.dist.json to js/options.json and adapt to your ip adresses');
@@ -123,115 +124,111 @@ var stopping = false;
  *
  */
 function setupServer() {
-  return new Promise(function(resolve) {
-    var response = '';
+  var response = '';
 
-    // static content webserver
-    app.use('/', express.static('../www/'));
+  // static content webserver
+  app.use('/', express.static('../www/'));
 
-    // logging
-    app.use(function (req, res, next) {
-      log.info('HMSRV: request:' + req.url);
-      stats.servedRequests++;
-      next();
+  // logging
+  app.use(function (req, res, next) {
+    log.info('HMSRV: request:' + req.url);
+    stats.servedRequests++;
+    next();
+  });
+
+  app.get('/devices', function (req, res, next) {
+    response = devices;
+    next();
+  }, sendResponse);
+
+  app.get('/channels', function (req, res, next) {
+    response = channels;
+    next();
+  }, sendResponse);
+
+  app.get('/datapoints', function (req, res, next) {
+    response = datapoints;
+    next();
+  }, sendResponse);
+
+  app.get('/rooms', function (req, res, next) {
+    response = rooms;
+    next();
+  }, sendResponse);
+
+  app.get('/values', function (req, res, next) {
+    // var id = parseInt(req.query.id, 10);
+    // if (!isNaN(id)) {
+    //   db.readId(dbTables.values, id, function(err, data) {
+    //     if (!err) {
+    //       response = data;
+    //     }
+    //     else {
+    //       response = {'msg': 'error reading database'};
+    //     }
+    //   });
+    // }
+    next();
+  }, sendResponse);
+
+  app.get('/value', function (req, res, next) {
+    var id = parseInt(req.query.id, 10);
+    if (!isNaN(id)) {
+      if (dpValues[id] !== undefined) {
+        response = {
+          id: id,
+          timestamp: dpValues[id].timstamp,
+          value: dpValues[id].value
+        };
+      }
+      else {
+        response = {"msg": "not available"};
+      }
+    }
+    next();
+  }, sendResponse);
+
+  app.get('/stats', function (req, res, next) {
+    response = {stats: stats};
+    next();
+  }, sendResponse);
+
+  function sendResponse(req, res) {
+    res.header("Access-Control-Allow-Origin", "*");
+    if (typeof response === 'object') {
+      response = JSON.stringify(response);
+    }
+    stats.servedRequestSize += response.length;
+    res.send(response);
+  }
+
+  // create secure server 
+  var port = options.hmsrv.httpsPort || 443;
+  httpsServer.listen(port);
+
+  // websocket server
+  io = socketio(httpsServer);
+
+  io.on('connection', function (socket) {
+    webSockets.push(socket);
+    log.info(`HMSRV: websocket: ${socket.handshake.address} successfully connected`);
+    socket.on('disconnect', function (/*socket*/) {
+      log.info(`HMSRV: websocket: ${this.handshake.address} disconnected`);
     });
-
-    app.get('/devices', function (req, res, next) {
-      response = devices;
-      next();
-    }, sendResponse);
-
-    app.get('/channels', function (req, res, next) {
-      response = channels;
-      next();
-    }, sendResponse);
-
-    app.get('/datapoints', function (req, res, next) {
-      response = datapoints;
-      next();
-    }, sendResponse);
-
-    app.get('/rooms', function (req, res, next) {
-      response = rooms;
-      next();
-    }, sendResponse);
-
-    app.get('/values', function (req, res, next) {
-      // var id = parseInt(req.query.id, 10);
-      // if (!isNaN(id)) {
-      //   db.readId(dbTables.values, id, function(err, data) {
-      //     if (!err) {
-      //       response = data;
-      //     }
-      //     else {
-      //       response = {'msg': 'error reading database'};
-      //     }
+    socket.on('system', function (data) {
+      var cmd = JSON.parse(data).cmd;
+      if (cmd.call === 'shutdown') {
+        shutdown({event: 'usershutdown'});
+      }
+      // else if (msg === 'mail') {
+      //   mail.send('hmsrv test mail\n\n', getSummary(), function() {
       //   });
       // }
-      next();
-    }, sendResponse);
-
-    app.get('/value', function (req, res, next) {
-      var id = parseInt(req.query.id, 10);
-      if (!isNaN(id)) {
-        if (dpValues[id] !== undefined) {
-          response = {
-            id: id,
-            timestamp: dpValues[id].timstamp,
-            value: dpValues[id].value
-          };
-        }
-        else {
-          response = {"msg": "not available"};
-        }
+      else if (cmd.call === 'handleLowBat') {
+        handleLowBat(cmd.datapoint, cmd.value)
       }
-      next();
-    }, sendResponse);
-
-    app.get('/stats', function (req, res, next) {
-      response = {stats: stats};
-      next();
-    }, sendResponse);
-
-    function sendResponse(req, res) {
-      res.header("Access-Control-Allow-Origin", "*");
-      if (typeof response === 'object') {
-        response = JSON.stringify(response);
-      }
-      stats.servedRequestSize += response.length;
-      res.send(response);
-    }
-
-    // create secure server 
-    var port = options.hmsrv.httpsPort || 443;
-    httpsServer.listen(port);
-
-    // websocket server
-    io = socketio(httpsServer);
-
-    io.on('connection', function (socket) {
-      webSockets.push(socket);
-      log.info(`HMSRV: websocket: ${socket.handshake.address} successfully connected`);
-      socket.on('disconnect', function (/*socket*/) {
-        log.info(`HMSRV: websocket: ${this.handshake.address} disconnected`);
-      });
-      socket.on('system', function (data) {
-        var cmd = JSON.parse(data).cmd;
-        if (cmd.call === 'shutdown') {
-          shutdown({event: 'usershutdown'});
-        }
-        // else if (msg === 'mail') {
-        //   mail.send('hmsrv test mail\n\n', getSummary(), function() {
-        //   });
-        // }
-        else if (cmd.call === 'handleLowBat') {
-          handleLowBat(cmd.datapoint, cmd.value)
-        }
-        log.debug(data);
-      });
-      // socket.emit('ping');
+      log.debug(data);
     });
-    resolve();
   });
 } //setupServer()
 
@@ -248,54 +245,37 @@ function pushToWebSockets(method, message) {
  *
  */
 function setupRega() {
-  return new Promise(function(resolve) {
-    regaHss = new Rega({
-      ccuIp: options.ccu.ip,
-      ready: function() {
-        log.info('CCU: rega is ready.');
-        regaUp = true;
-        // if (typeof callback === "function") {
-        //   callback();
-        // }
-      },
-      down: function() {
-        log.error('CCU: rega is down.');
-      },
-      unreachable: function() {
-        log.error('CCU: rega is unreachable.');
-      }
-    });
-    resolve();
+  regaHss = new Rega({
+    ccuIp: options.ccu.ip,
+    ready: function() {
+      log.info('CCU: rega is ready.');
+      regaUp = true;
+    },
+    down: function() {
+      log.error('CCU: rega is down.');
+    },
+    unreachable: function() {
+      log.error('CCU: rega is unreachable.');
+    }
   });
 } // setupRega()
 
-function loadRegaData() {
-  return new Promise(function (resolve, reject) {
-    loadRegaDataFromFile()
-    .then(() => {
-      resolve();
-    })
-    .catch(() => {
-      loadRegaDataFromCCU(0)
-      .then(() => {
-        // clean datapoints
-        for (var i in datapoints) {
-          datapoints[i].Timestamp = 0;
-          // if (datapoints[i].ValueUnit === '') {
-          //   datapoints[i].ValueUnit = '';
-          // }
-          // if (datapoints[i].ValueList === undefined) {
-          //   datapoints[i].ValueList = '';
-          // }
-        }
-        writeRegaDataToFile(resolve, reject);
-        resolve();
-      });
-    });
-  });
+async function loadRegaData() {
+  try {
+    await loadRegaDataFromFile();
+  }
+  catch (err) {
+    try {
+      await loadRegaDataFromCCU(0);
+      await writeRegaDataToFile();
+    }
+    catch (err) {
+      log.error("Failed to load ReGa Data from CCU.");
+    }
+  }
 } // loadRegaData()
 
-function writeRegaDataToFile(resolve) {
+async function writeRegaDataToFile() {
   var _regaData = [];
   var i;
 
@@ -303,7 +283,7 @@ function writeRegaDataToFile(resolve) {
     _regaData.push(regaData[i]);
   }
 
-  function write(fileName) {
+  async function write(fileName) {
     if (fileName) {
       var mode = (stats.runMode !== 'PRODUCTION')? '.' + stats.runMode.toLowerCase() : '';
       var fullPath = __dirname + '/../data/' + fileName + mode + '.json';
@@ -326,16 +306,14 @@ function writeRegaDataToFile(resolve) {
           break;
       }
       if (data) {
-        fs.writeFile(fullPath, data, function(err/*, data*/) {
-          if (err) {
-            log.error('HMSRV: error reading rega data from file: ' + fullPath);
-          }
-          return write(_regaData.shift());
-        });
+        try {
+          await fsp.writeFile(fullPath, data);
+        }
+        catch(err) {
+          log.error('HMSRV: error reading rega data from file: ' + fullPath);
+        }
+        write(_regaData.shift());
       }
-    }
-    else {
-      resolve();
     }
   }
   write(_regaData.shift());
@@ -357,13 +335,13 @@ function loadRegaDataFromFile() {
         fs.stat(fullPath, function(err, stats) {
           if (err) {
             // file does not exist
-            reject();
+            reject(`HMSRV: file doesn't exist: ${fullPath}`);
           }
           else {
             if (stats.isFile()) {
               fs.readFile(fullPath, function(err, data) {
                 if (err) {
-                  log.error('HMSRV: error reading rega data from file: ' + fullPath);
+                  reject(`HMSRV: error reading rega data from file: ${fullPath}`);
                 }
                 else {
                   switch (fileName) {
@@ -388,9 +366,7 @@ function loadRegaDataFromFile() {
               });
             }
             else {
-              log.error('HMSRV: cannot read from file ' + fullPath);
-              // unrecoverable error: shutdown
-              shutdown({event: 'emergenacyshutdown'});
+              reject(`HMSRV: cannot read from file ${fullPath}`);
             }
           }
         });
@@ -404,14 +380,17 @@ function loadRegaDataFromFile() {
 } // loadRegaDataFromFile()
 
 function loadRegaDataFromCCU(index) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     if (index === 0) {
       regaHss.checkTime(function() {
       });
     }
 
     regaHss.runScriptFile(regaData[index], function(res, err) {
-      if (!err) {
+      if (err) {
+        reject(`HMSRV: error running script ${regaData[index]}`);
+      }
+      else {
         var data = JSON.parse(unescape(res.stdout));
 
         if (regaData[index] === 'channels') {
@@ -427,9 +406,6 @@ function loadRegaDataFromCCU(index) {
           rooms = data;
         }
         log.info('REGA: ' + regaData[index] + ' successfully read, ' + Object.keys(data).length + ' entries.');
-
-        // // save persistent data to disk for further processing
-        // fs.writeFile(directories.data + '/persistence-' + regaData[index] + '.json', JSON.stringify(data));
 
         index++;
         if (index < regaData.length) {
@@ -448,93 +424,67 @@ function loadRegaDataFromCCU(index) {
  * RPC
  *
  */
-function setupRpc() {
-  return new Promise(function(resolve) {
-    var instances = [];
-    for (var i = 0; i < (options.ccu.rpc.length-rpcNoCUxD); i++) {
-      hmrpc[i] = new Rpc.HomematicRpc({options: options.ccu.rpc[i], instanceId: options.hmsrv.instanceId.value, runMode: stats.runMode.toLowerCase(), log: log, event: logEvent});
-      instances.push(hmrpc[i]);
+async function setupRpc() {
+  var instances = [];
+  for (var i = 0; i < (options.ccu.rpc.length-rpcNoCUxD); i++) {
+    hmrpc[i] = new Rpc.HomematicRpc({options: options.ccu.rpc[i], instanceId: options.hmsrv.instanceId.value, runMode: stats.runMode.toLowerCase(), log: log, event: logEvent});
+    instances.push(hmrpc[i]);
+  }
+  for (i in instances) {
+    try {
+      await instances[i].start();
     }
-    // Promise.all(instances)
-    // .then(() => {
-    //   resolve();
-    // })
-    instances[0].start()
-    .then(() => {
-      instances[1].start()
-      .then(() => {
-        resolve();
-      })
-      .catch(() => {
-
-      });
-    })
-    .catch(() => {
-
-    });
-  });
+    catch(err) {
+      log.error(`Failed to start RPC instance ${i}. ${err}`)
+    }
+  }
 } // setupRpc()
 
-function stopRpc() {
-  return new Promise(function(resolve, reject) {
-    var instances = [];
-    for (var i = 0; i < (hmrpc.length); i++) {
-      instances.push(hmrpc[i]);
+async function stopRpc() {
+  for (var i in hmrpc) {
+    try {
+      await hmrpc[i].stop();
     }
-    instances[0].stop()
-    .then(() => {
-      instances[1].stop()
-      .then(() => {
-        resolve();
-      })
-      .catch(() => {
-        reject();
-      })
-    })
-    .catch(() => {
-      reject();
-    })
-  }); // stopRpc()
-}
+    catch(err) {
+      log.error(`Failed to shutdown RPC instance 0. ${err}`);
+    }
+  }
+} // stopRpc()
 
 /******************************************************************************
  *
  * Graphite
  *
  */
-function setupGraphite() {
-  return new Promise(function (resolve) {
-    if (checkGraphiteConfig()) {
-      var _options = {
-        ip: options.graphite.ip,
-        port: options.graphite.port,
-        prefix: options.graphite.prefix
-      };
-      graphite = new Graphite(_options);
+async function setupGraphite() {
+  if (checkGraphiteConfig()) {
+    var _options = {
+      ip: options.graphite.ip,
+      port: options.graphite.port,
+      prefix: options.graphite.prefix
+    };
+    graphite = new Graphite(_options);
 
-      graphite.connect(function() {
-      });
+    await graphite.connect();
 
-      graphite.on("close", () => {
-        log.info("GRAPHITE: connection closed.");
-        stats.graphite.connection.close++;
-      });
+    graphite.on("close", () => {
+      log.info("GRAPHITE: connection closed.");
+      stats.graphite.connection.close++;
+    });
 
-      graphite.on("connect", () => {
-        log.info("GRAPHITE: successfully connected.");
-        stats.graphite.connection.success++;
-      });
+    graphite.on("connect", () => {
+      log.info("GRAPHITE: successfully connected.");
+      stats.graphite.connection.success++;
+    });
 
-      graphite.on("error", (err) => {
-        log.error("GRAPHITE: " + err);
-        stats.graphite.connection.error++;
-      });
-    }
-    else {
-      log.warn('Incomplete Graphite config');
-    }
-    resolve();
-  });
+    graphite.on("error", (err) => {
+      log.error("GRAPHITE: " + err);
+      stats.graphite.connection.error++;
+    });
+  }
+  else {
+    log.warn('Incomplete Graphite config');
+  }
 } // setupGraphite()
 
 function checkGraphiteConfig() {
@@ -548,40 +498,35 @@ function checkGraphiteConfig() {
   }
 } // checkGraphiteConfig()
 
-function flushGraphite() {
-  return new Promise(function(resolve) {
-    if (graphiteCacheValuesFull.length > 0) {
-      var graphiteValues = graphiteCacheValuesFull;
-      graphiteCacheValuesFull = [];
+async function flushGraphite() {
+  if (graphiteCacheValuesFull.length > 0) {
+    var graphiteValues = graphiteCacheValuesFull;
+    graphiteCacheValuesFull = [];
 
-      graphite.send(graphiteValues)
-      .then(() => {
-        log.debug(`GRAPHITE: ${graphiteValues.length} values flushed`);
-        stats.graphite.flushing.success++;
-        resolve();
-      })
-      .catch((msg) => {
-        log.error(`GRAPHITE: flush failed: ${msg}`);
-
-        // new metrics may have emerged while flushing
-        if (graphiteCacheValuesFull.length > 0) {
-          // in this case merge old and new metrics
-          var allValues = [...graphiteCacheValuesFull, ...graphiteValues];
-          graphiteValues = allValues;
-        }
-        else {
-          // nothing new since
-          graphiteCacheValuesFull = graphiteValues;
-        }
-        stats.graphite.flushing.fail++;
-      });
-
+    try {
+      await graphite.send(graphiteValues);
+      log.debug(`GRAPHITE: ${graphiteValues.length} values flushed`);
+      stats.graphite.flushing.success++;
     }
-    else {
-      log.debug('GRAPHITE: nothing to flush');
-      resolve();
-    }
-  }); //flushGraphite()
+    catch(err) {
+      log.error(`GRAPHITE: flush failed: ${err}`);
+
+      // new metrics may have emerged while flushing
+      if (graphiteCacheValuesFull.length > 0) {
+        // in this case merge old and new metrics
+        var allValues = [...graphiteCacheValuesFull, ...graphiteValues];
+        graphiteValues = allValues;
+      }
+      else {
+        // nothing new since
+        graphiteCacheValuesFull = graphiteValues;
+      }
+      stats.graphite.flushing.fail++;
+    };
+  }
+  else {
+    log.debug('GRAPHITE: nothing to flush');
+  }
 }
 
 function stopGraphite() {
@@ -594,16 +539,25 @@ function stopGraphite() {
  * Filesystem
  *
  */
-function setupFileSystem() {
-  return new Promise(function(resolve) {
-    // verify that all directories exist
-    for (var i in directories) {
-      if (!fs.existsSync(directories[i])) {
-        fs.mkdirSync(directories[i]);
+async function setupFileSystem() {
+  let exists;
+  // verify that all directories exist
+  for (var i in directories) {
+    try {
+      exists = await fsp.stat(directories[i]);
+      if (!exists) {
+        try {
+          await fsp.mkdir(directories[i]);
+        }
+        catch(err) {
+          log.error(`Failed to create directory ${diretory[i]} - ${err}`);
+        }
       }
     }
-    resolve();
-  });
+    catch (err) {
+      log.error(`Failed to verify directory ${directory[i]} - ${err}`);
+    }
+  }
 } // setupFileSystem()
 
 function handleLowBat(id, status) {
@@ -770,19 +724,17 @@ function logEvent(event) {
  *
  */
 // function setupCron() {
-//   return new Promise(function(resolve, reject) {
-//     summaryJob = new CronJob({
-//       cronTime: '0 0 12 * * 0-6',
-//       onTick:  function () {
-//         // mail.send('hmsrv summary', getSummary(), function() {
-//         // });
-//         countValues = 0;
-//         countValuesFull = 0;
-//       },
-//       start: true
-//     });
-//     resolve();
+//   summaryJob = new CronJob({
+//     cronTime: '0 0 12 * * 0-6',
+//     onTick:  function () {
+//       // mail.send('hmsrv summary', getSummary(), function() {
+//       // });
+//       countValues = 0;
+//       countValuesFull = 0;
+//     },
+//     start: true
 //   });
+//   resolve();
 // } // setupCron()
 
 // function stopCron() {
@@ -824,39 +776,35 @@ process.on("uncaughtException", function(err) {
   }
 });
 
-function shutdown(params) {
+async function shutdown(params) {
   if (!stopping) {
     stopping = true;
+
     log.info('HMSRV: "' + params.event + '", shutting down...');
 
     var mode = (stats.runMode !== 'PRODUCTION')? '.' + stats.runMode.toLowerCase() : '';
     var data = JSON.stringify(datapoints, null, 2);
     var fullPath = __dirname + '/../data/datapoints' + mode + '.json'
-    fs.writeFile(fullPath, data, function(err) {
-      if (err) {
-        log.error('HMSRV: error writing datapoints to file: ' + fullPath);
-      }
-    });
+    try {
+      await fsp.writeFile(fullPath, data);
+      log.info('HMSRV: datapoints successfully written to file');
+    }
+    catch (err) {
+      log.error('HMSRV: error writing datapoints to file: ' + fullPath);
+    }
 
-    // stopCron()
-    // .then(() => {
-      stopRpc()
-      .then(() => {
-        flushGraphite()
-        .then(() => {
-          stopGraphite();
-          log.info("Gracefully shutdown HMSRV. Bye.");
-          process.exit(0);
-        })
-        .catch(() => {
-          log.info("flushGraphite failed during HMSRV shutdown. Exiting anyway. Bye.");
-          process.exit(1001);
-        });
-      })
-      .catch(() => {
-        log.info("stopRPC failed during HMSRV shutdown. Exiting anyway. Bye.");
-        process.exit(1002);
-      });
+    try {
+      // await stopCron()
+      await stopRpc();
+      await flushGraphite();
+      await stopGraphite();
+      log.info("Gracefully shutdown HMSRV. Bye.");
+      process.exit(0);
+    }
+    catch(err) {
+      log.error(`ERROR: ${err}`);
+      process.exit(1001);
+    };
   }
 } //shutdown()
 
@@ -919,50 +867,42 @@ function prepareConfig() {
  * MAIN
  *
  */
-var startTime = log.time();
+async function main() {
 
-parseArgs();
-prepareConfig();
+  let dpCount = 0;
+  let startTime = log.time();
 
+  parseArgs();
+  prepareConfig();
 
-log.init(options);
-log.info('Starting HMSRV in ' + stats.runMode + ' mode');
-log.info('Visit https://' + options.hmsrv.ip + ':' + options.hmsrv.httpsPort.toString());
+  log.init(options);
+  log.info('Starting HMSRV in ' + stats.runMode + ' mode');
+  log.info('Visit https://' + options.hmsrv.ip + ':' + options.hmsrv.httpsPort.toString());
 
-// mail.init(options);
+  // mail.init(options);
 
-// Promise.all([setupServer, setupRega, setupFileSystem, setupGraphite, loadRegaData, setupRpc])
-setupServer()
-.then(() => {
-  setupRega()
-  .then(() => {
-    setupFileSystem()
-    .then(() => {
-      setupGraphite()
-      .then(() => {
-        loadRegaData()
-        .then(() => {
-          setupRpc()
-          .then(() => {
-            var dpCount = 0;
-            // build datapoint Index name <> id
-            for (var i in datapoints) {
-              dpIndex[unescape(datapoints[i].Name)] = i;
-              dpCount++;
-            }
-            log.info('HMSRV: Data Point Index successfully built, ' + dpCount.toString() + ' entries.');
+  setupServer();
+  setupRega();
+  await setupFileSystem();
+  await setupGraphite();
+  await loadRegaData();
+  await setupRpc();
 
-            setInterval(function() {
-              flushGraphite();
-            }, nFlushInterval * 1000);
+  // build datapoint index
+  for (var i in datapoints) {
+    dpIndex[unescape(datapoints[i].Name)] = i;
+    dpCount++;
+  }
+  log.info('HMSRV: Data Point Index successfully built, ' + dpCount.toString() + ' entries.');
 
-            // setupCron();
+  setInterval(function() {
+    flushGraphite();
+  }, nFlushInterval * 1000);
 
-            log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
-          })
-        })
-      })
-    })
-  })
-})
+  // await setupCron();
+
+  log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
+}
+
+main();
 })();

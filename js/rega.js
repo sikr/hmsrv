@@ -13,12 +13,11 @@
  *
  */
 
-var http    = require("http");
 var fs      = require('fs');
-var xml2js  = require('xml2js');
-var request = require('request');
+var http    = require('http');
+var https   = require('https');
 var log     = require('./logger.js');
-var utils   = require('./utils');
+var xml2js  = require('xml2js');
 
 var x2j = new xml2js.Parser({explicitArray:false});
 
@@ -26,23 +25,33 @@ var rega = function(options) {
 
   this.options = options;
 
-  if (options.ccuIp) {
-    request('http://' + options.ccuIp + '/ise/checkrega.cgi', function (error, response, body) {
-      if (!error && response.statusCode == 200) {
-        if (body == "OK") {
+  if (options.ccuIp && options.ca) {
+
+    var requestOptions = {
+      hostname: options.ccuIp,
+      path: '/ise/checkrega.cgi',
+      method: 'GET'
+    };
+    // provide certificate authority to verify https cert
+    require('https').globalAgent.options.ca = fs.readFileSync(options.ca);
+
+    var request = https.request(requestOptions, function(response) {
+      response.on('data', function(data) {
+        if (response.statusCode === 200 && data.toString() === 'OK') {
           options.ready();
         }
         else {
           options.down();
         }
-      }
-      else {
-        options.unreachable();
-      }
+      });
+      response.on('error', function() {
+          options.unreachable();
+      });
     });
+    request.end()
   }
   else {
-    options.unreachable();
+    options.error();
   }
 };
 

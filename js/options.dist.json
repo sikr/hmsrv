@@ -8,6 +8,11 @@
       "instanceId": {
         "comment": "Used e. g. for RPC connect as unique identifier combined with run mode (development|test|production)",
         "value": ""
+      },
+      "certificates": {
+        "key": "../ssl/key.pem",
+        "cert": "../ssl/cert.pem",
+        "ca": "../ssl/ca.pem"
       }
     },
     "ccu": {
@@ -76,6 +81,11 @@
       "instanceId": {
         "comment": "Used e. g. for RPC connect as unique identifier combined with run mode (development|test|production)",
         "value": ""
+      },
+      "certificates": {
+        "key": "../ssl/key.pem",
+        "cert": "../ssl/cert.pem",
+        "ca": "../ssl/ca.pem"
       }
     },
     "ccu": {
@@ -144,6 +154,11 @@
       "instanceId": {
         "comment": "Used e. g. for RPC connect as unique identifier combined with run mode (development|test|production)",
         "value": ""
+      },
+      "certificates": {
+        "key": "../ssl/key.pem",
+        "cert": "../ssl/cert.pem",
+        "ca": "../ssl/ca.pem"
       }
     },
     "ccu": {

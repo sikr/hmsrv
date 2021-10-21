@@ -247,15 +247,19 @@ function pushToWebSockets(method, message) {
 function setupRega() {
   regaHss = new Rega({
     ccuIp: options.ccu.ip,
-    ready: function() {
-      log.info('CCU: rega is ready.');
-      regaUp = true;
-    },
+    ca: options.hmsrv.certificates.ca,
     down: function() {
-      log.error('CCU: rega is down.');
+      log.error('CCU: ReGa is down.');
+    },
+    error: function() {
+      log.error('Configuration is incomplete.')
+    },
+    ready: function() {
+      log.info('CCU: ReGa is ready.');
+      // regaUp = true;
     },
     unreachable: function() {
-      log.error('CCU: rega is unreachable.');
+      log.error('CCU: ReGa is unreachable.');
     }
   });
 } // setupRega()

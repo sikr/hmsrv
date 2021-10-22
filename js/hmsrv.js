@@ -95,7 +95,8 @@ const rpcNoCUxD = 1;
 //
 var directories = {
   data: __dirname + '/../data',
-  log : __dirname + '/../log'
+  log : __dirname + '/../log',
+  ssl : __dirname + '/../ssl'
 };
 
 //

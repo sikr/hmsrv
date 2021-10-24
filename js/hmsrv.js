@@ -788,7 +788,7 @@ function logEvent(event) {
  */
 function setupCron() {
   storeJob = new CronJob({
-    cronTime: '0 0 0 * * 0-6',
+    cronTime: '59 59 23 * * 0-6',
     // cronTime: '0 30 15 * * 0-6',  // dbg
     onTick:  function () {
       handleEnergyCounterDailyDiff();

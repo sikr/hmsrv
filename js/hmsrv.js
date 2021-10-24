@@ -702,19 +702,21 @@ function handleEnergyCounterDailyDiff() {
 }
 
 function updateDatapoint(id, value, timestamp) {
+  let status = ''
   if (dpValues[id] === undefined) {
     dpValues[id] = {timestamp: timestamp.getTime(), value: value};
-    return 'new';
+    status = 'new';
   }
   else if (dpValues[id].value === value) {
-    return 'unchanged';
+    status =  'unchanged';
   }
   else {
     dpValues[id] = {timestamp: timestamp.getTime(), value: value};
-    return 'changed';
+    status =  'changed';
   }
   datapoints[id].Value = value;
   datapoints[id].Timestamp = timestamp.toISOString();
+  return status;
 }
 
 function getDatapointId(address, name) {

@@ -35,11 +35,14 @@ var log         = require('./logger.js');
 var utils       = require('./utils');
 var optionsFile = require('./options.json');
 var persistence = require('../data/persistence.json');
-var lowbat      = require('../data/lowbat.json');
-var offset      = require('../data/offset.json');
+var lowBatFile  = '../data/lowbat.json';
+var lowbat      = require(lowBatFile);
+var offsetFile  = '../data/offset.json';
+var offset      = require(offsetFile);
+var storeFile   = '../data/store.json';
 var options     = null;
-// var CronJob     = require('cron').CronJob;
-// var summaryJob  = null;
+var CronJob     = require('cron').CronJob;
+var storeJob    = null;
 // var assert      = require('assert');
 var os          = require('os');
 
@@ -226,7 +229,10 @@ function setupServer() {
       //   });
       // }
       else if (cmd.call === 'handleLowBat') {
-        handleLowBat(cmd.datapoint, cmd.value)
+        handleLowBat(cmd.datapoint, cmd.value);
+      }
+      else if (cmd.call === 'handleEnergyCounterDailyDiff') {
+        handleEnergyCounterDailyDiff();
       }
       log.debug(data);
     });
@@ -572,7 +578,6 @@ function handleLowBat(id, status) {
   let now = new Date();
   let modified = false;
 
-  datapoints[id].Value = status;
   if (status === true) {
     if (!lowbat[deviceId]) {
       // device not yet listed in lowbat.json
@@ -644,78 +649,131 @@ function getOffset(datapoint) {
   return sum;
 }
 
+function applyOffset(id, value) {
+  let unadjustedValue = value;
+  let offset = getOffset(id);
+  value = Math.round((value + offset) * 10) / 10;
+  if (value < datapoints[id].Value) {
+    // overflow
+  }
+  return [value, unadjustedValue]
+}
+
+function handleEnergyCounterDailyDiff() {
+  try {
+    fs.readFile(storeFile, (error, data) => {
+      if (!error) {
+        try {
+          let store = JSON.parse(data);
+          if (store.datapoints[3177] && store.datapoints[3177].value) {
+            let diff = Math.round((datapoints[3177].Value - store.datapoints[3177].value) * 10) / 10;
+            let timestamp = new Date().getTime();
+
+            graphiteCacheValuesFull.push({
+              path: 'home.cellar.utility_room.electric_meter.energy_counter_by_day',
+              value: diff,
+              timestamp: timestamp - 86400000
+            });
+
+            store.datapoints[3177].value = datapoints[3177].Value;
+
+            try {
+              fs.writeFile(storeFile, JSON.stringify(store, null, 4), (error) => {
+                if (error) {
+                  log.error(`Failed to write store file. ${error}`);
+                }
+              });
+
+            }
+            catch(err) {
+              log.error(`Failed to write store file. ${err}`);
+            }
+          }
+        }
+        catch(err) {
+          log.error(`Failed to process store JSON. ${err}`)
+        }
+      }
+    });
+  }
+  catch(err) {
+    log.error(`Failed to read store file. ${err}`);
+  }
+}
+
+function updateDatapoint(id, value, timestamp) {
+  if (dpValues[id] === undefined) {
+    dpValues[id] = {timestamp: timestamp.getTime(), value: value};
+    return 'new';
+  }
+  else if (dpValues[id].value === value) {
+    return 'unchanged';
+  }
+  else {
+    dpValues[id] = {timestamp: timestamp.getTime(), value: value};
+    return 'changed';
+  }
+  datapoints[id].Value = value;
+  datapoints[id].Timestamp = timestamp.toISOString();
+}
+
+function getDatapointId(address, name) {
+  let id = dpIndex['BidCos-RF.' + address + '.' + name];
+  if (id === undefined) {
+    id = dpIndex['HmIP-RF.' + address + '.' + name];
+  }
+  return id;
+}
+
 function logEvent(event) {
   if (!stopping) {
-    var timestamp = new Date().getTime();
     var id;
     var address = event[1];
     var name = event[2];
     var value = parseFloat(event[3]);
-    var status;
-    var store = true;
+    var unadjustedValue = -1;
+    let timestamp = new Date();
+    let status = '';
 
+    id = getDatapointId(address, name);
+    if (id !== undefined) {
 
-    if (isNaN(value)) {
-      if (typeof event[3] === 'boolean') {
-        value = (event[3] === true)? 1 : 0;
-        log.verbose('RPC: converted non numeric (boolean) to integer: ' + address + ', ' + name + ', ' + event[3] + ' -> ' + value);
+      if (offset && offset[id]) {
+        [value, unadjustedValue] = applyOffset(id, value);
       }
-      else {
-        store = false;
-        log.verbose('RPC: non numeric value: ' + address + ', ' + name + ', ' + event[3]);
+
+      status = updateDatapoint(id, value, timestamp);
+
+      // console
+      log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
+
+      // websocket
+      var update = {timestamp: timestamp.getTime(), time: utils.getHumanReadableTime(timestamp.getTime()), status: status, id: id, address: address, name: name, value: value};
+      if (unadjustedValue !== -1) {
+        update.unadjustedValue = unadjustedValue;
+      }
+      pushToWebSockets('update', update);
+
+      // graphite
+      if (persistence[id] && persistence[id].graphite) {
+      // convert non numeric values if necessary/possible
+        if (isNaN(value)) {
+          if (typeof event[3] === 'boolean') {
+            value = (event[3] === true)? 1 : 0;
+          }
+          else {
+            log.warn(`Value "${value}" for datapoint ${id} - ${datapoints[id].Name} is not numeric`);
+          }
+        }
+        graphiteCacheValuesFull.push({
+          path: persistence[id].graphite.path,
+          value: value,
+          timestamp: timestamp.getTime()
+        });
       }
     }
-    if (store) {
-      id = dpIndex['BidCos-RF.' + address + '.' + name];
-      if (id === undefined) {
-        id = dpIndex['HmIP-RF.' + address + '.' + name];
-      }      
-
-      if (id !== undefined) {
-
-        // hack to solve HM-ES-TX-WM overflow at 838860,7 Wh
-        var datapoint = parseInt(id, 10);
-        var unadjustedValue = -1;
-        if (datapoint === 3177) {
-          unadjustedValue = value;
-          var offset = getOffset(datapoint);
-          value += offset;
-        }
-        status = '';
-        if (dpValues[id] === undefined) {
-          status = 'new';
-          dpValues[id] = {timestamp: timestamp, value: value};
-        }
-        else if (dpValues[id].value === value) {
-          status = 'unchanged';
-        }
-        else {
-          status = 'changed';
-          dpValues[id] = {timestamp: timestamp, value: value};
-        }
-        
-        // console
-        log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
-
-        // websocket
-        var update = {timestamp: timestamp, time: utils.getHumanReadableTime(timestamp), status: status, id: id, address: address, name: name, value: value};
-        if (unadjustedValue !== -1) {
-          update.unadjustedValue = unadjustedValue;
-        }
-        pushToWebSockets('update', update);
-
-        // graphite
-        if (persistence[id] && persistence[id].graphite) {
-          graphiteCacheValuesFull.push({
-            path: persistence[id].graphite.path,
-            value: value,
-            timestamp: timestamp
-          });
-        }
-      }
-      else {
-        log.verbose('HMSRV: <unknown> ' + address + ', ' + name + ', ' + value);
-      }
+    else {
+      log.verbose('HMSRV: <unknown> ' + address + ', ' + name + ', ' + value);
     }
     if (name === 'LOWBAT') {
       handleLowBat(id, event[3]);
@@ -728,26 +786,22 @@ function logEvent(event) {
  * Cron
  *
  */
-// function setupCron() {
-//   summaryJob = new CronJob({
-//     cronTime: '0 0 12 * * 0-6',
-//     onTick:  function () {
-//       // mail.send('hmsrv summary', getSummary(), function() {
-//       // });
-//       countValues = 0;
-//       countValuesFull = 0;
-//     },
-//     start: true
-//   });
-//   resolve();
-// } // setupCron()
+function setupCron() {
+  storeJob = new CronJob({
+    cronTime: '0 0 0 * * 0-6',
+    // cronTime: '0 30 15 * * 0-6',  // dbg
+    onTick:  function () {
+      handleEnergyCounterDailyDiff();
+      // countValues = 0;
+      // countValuesFull = 0;
+    },
+    start: true
+  });
+} // setupCron()
 
-// function stopCron() {
-//   return new Promise(function(resolve, reject) {
-//     summaryJob.stop();
-//     resolve();
-//   });
-// } // stopCron()
+function stopCron() {
+  storeJob.stop();
+} // stopCron()
 
 // function getSummary() {
 //   return 'Hi!\n\n' +
@@ -798,8 +852,9 @@ async function shutdown(params) {
       log.error('HMSRV: error writing datapoints to file: ' + fullPath);
     }
 
+    stopCron()
+
     try {
-      // await stopCron()
       await stopRpc();
       await flushGraphite();
       await stopGraphite();
@@ -904,7 +959,7 @@ async function main() {
     flushGraphite();
   }, nFlushInterval * 1000);
 
-  // await setupCron();
+  setupCron();
 
   log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
 }

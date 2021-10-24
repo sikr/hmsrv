@@ -5,7 +5,9 @@
   "main": "hmsrv.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "webpack": "webpack"
+    "webpack": "webpack",
+    "start": "cd %dev_home%/projects/hmsrv/js && node hmsrv.js --development",
+    "debug": "cd %dev_home%/projects/hmsrv/js && node --inspect-brk hmsrv.js --development"
   },
   "keywords": [
     "binrpc",

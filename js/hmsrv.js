@@ -592,9 +592,9 @@ function handleLowBat(id, status) {
       }
       /*
        * Some devices seem to have a lowbat true/false jitter, so only
-       * lowbat=false events lasting for more than 1 days are presereved
+       * lowbat=false events lasting for more than 30 days are presereved
        */
-      if (date && now.valueOf() - date.valueOf() < 86400000) {
+      if (date && now.valueOf() - date.valueOf() < 2592000000) {
         // discard jitter
         event.replacement = '';
         modified = true;

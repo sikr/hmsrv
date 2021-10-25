@@ -672,7 +672,7 @@ function handleEnergyCounterDailyDiff() {
             graphiteCacheValuesFull.push({
               path: 'home.cellar.utility_room.electric_meter.energy_counter_by_day',
               value: diff,
-              timestamp: timestamp
+              timestamp: timestamp - 86400000
             });
 
             store.datapoints[3177].value = datapoints[3177].Value;

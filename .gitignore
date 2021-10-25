@@ -9,10 +9,12 @@ hmsrv.sublime*
 js/____*
 js/options.json
 js/trial
+launch.json
 log/*
 node_modules
 package-lock.json
 private*
 regascripts/output/*
+snippets/*
 ssl
 www/components

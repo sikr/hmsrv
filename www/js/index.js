@@ -13,4 +13,7 @@ document.querySelector('#lowbat-true').addEventListener("click", () => {
 document.querySelector('#lowbat-false').addEventListener("click", () => {
   socket.emit('system', '{"cmd": {"call": "handleLowBat", "value": false, "datapoint": "30012"}}');
 });
+document.querySelector('#energy').addEventListener("click", () => {
+  socket.emit('system', '{"cmd": {"call": "handleEnergyCounterDailyDiff"}}');
+});
 

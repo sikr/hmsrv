@@ -48,3 +48,6 @@ th {
   color: #007929;
   font-weight: bold;
 }
+button {
+  padding: 8px;
+}

@@ -4,10 +4,12 @@
  *
  *
  */
-var devices = require('../data/devices.development.json');
-var channels = require('../data/channels.development.json');
-var datapoints = require('../data/datapoints.development.json');
-var rooms = require('../data/rooms.development.json');
+var options    = require('./options.json');
+var mode       = options.development ? 'development' : options.test ? 'test' : '';
+var devices    = require(`../data/devices.${mode}.json`);
+var channels   = require(`../data/channels.${mode}.json`);
+var datapoints = require(`../data/datapoints.${mode}.json`);
+var rooms      = require(`../data/rooms.${mode}.json`);
 
 try {
   console.log('');  // empty line

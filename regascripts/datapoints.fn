@@ -120,7 +120,18 @@ foreach (sDevId, root.Devices().EnumUsedIDs()) {
                             Write('"');
                         }
 
-                        Write(',"ValueUnit":"' # oDP.ValueUnit());
+                        ! 2022-10-25, SiKr: prevent quadruple quotes (see below)
+                        if (oDP.ValueUnit() != '""') {
+                            Write(',"ValueUnit":"' # oDP.ValueUnit());
+                        }
+                        else {
+                            ! 2022-10-25, SiKr: ValueUnit may contain empty
+                            ! double quotes ("") which would results in
+                            ! quadruple qoutes ("""") which eventually causes
+                            ! JSON parsing to fail. So if ValueUnit already
+                            ! contains double quotes, don't quote these again.
+                            Write(',"ValueUnit":"');
+                        }
                         Write('","Timestamp":"' # oDP.Timestamp());
                         Write('","Value":');
 

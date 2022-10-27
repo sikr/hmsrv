@@ -736,9 +736,17 @@ function logEvent(event) {
     var unadjustedValue = -1;
     let timestamp = new Date();
     let status = '';
+    let device, channel;
 
     id = getDatapointId(address, name);
     if (id !== undefined) {
+
+      if (datapoints[id] && datapoints[id].Parent && channels[datapoints[id].Parent]) {
+        channel = channels[datapoints[id].Parent];
+        if (channel && channel.Parent) {
+          device = devices[channel.Parent];
+        }
+      }
 
       if (offset && offset[id]) {
         [value, unadjustedValue] = applyOffset(id, value);
@@ -750,7 +758,16 @@ function logEvent(event) {
       log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
 
       // websocket
-      var update = {timestamp: timestamp.getTime(), time: utils.getHumanReadableTime(timestamp.getTime()), status: status, id: id, address: address, name: name, value: value};
+      var update = {
+        // timestamp: timestamp.getTime(),
+        time: utils.getHumanReadableTime(timestamp.getTime()),
+        status: status[0],
+        nameh: device? device.Name : undefined,
+        name: name,
+        id: id,
+        address: address,
+        value: value
+      };
       if (unadjustedValue !== -1) {
         update.unadjustedValue = unadjustedValue;
       }

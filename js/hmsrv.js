@@ -37,8 +37,8 @@ var optionsFile = require('./options.json');
 var persistence = require('../data/persistence.json');
 var lowBatFile  = '../data/lowbat.json';
 var lowbat      = require(lowBatFile);
-var offsetFile  = '../data/offset.json';
-var offset      = require(offsetFile);
+var offsetsFile = '../data/offsets.json';
+var offsets     = require(offsetsFile);
 var storeFile   = '../data/store.json';
 var options     = null;
 var CronJob     = require('cron').CronJob;
@@ -438,7 +438,7 @@ function loadRegaDataFromCCU(index) {
 async function setupRpc() {
   var instances = [];
   for (var i = 0; i < (options.ccu.rpc.length-rpcNoCUxD); i++) {
-    hmrpc[i] = new Rpc.HomematicRpc({options: options.ccu.rpc[i], instanceId: options.hmsrv.instanceId.value, runMode: stats.runMode.toLowerCase(), log: log, event: logEvent});
+    hmrpc[i] = new Rpc.HomematicRpc({options: options.ccu.rpc[i], instanceId: options.hmsrv.instanceId.value, runMode: stats.runMode.toLowerCase(), log: log, event: handleRpcEvent});
     instances.push(hmrpc[i]);
   }
   for (i in instances) {
@@ -632,31 +632,64 @@ function handleLowBat(id, status) {
   }
 }
 
-function getOffset(datapoint) {
-  var sum = 0;
-
+function getTotalOffset(datapoint) {
+  var total = 0;
   try {
-    if (offset[datapoint] && offset[datapoint].events) {
-      let events = offset[datapoint].events;
+    if (offsets[datapoint] && offsets[datapoint].events) {
+      let events = offsets[datapoint].events;
       for (var i in events) {
-        sum += events[i].value;
+        total += events[i].value;
       }
     }
   }
   catch(err) {
     log.error(`Error calculating offset for datapoint ${datapoint}`);
   }
-  return sum;
+  return total;
 }
 
-function applyOffset(id, value) {
-  let unadjustedValue = value;
-  let offset = getOffset(id);
-  value = Math.round((value + offset) * 10) / 10;
-  if (value < datapoints[id].Value) {
-    // overflow
+function checkOverflowOrReset(datapoint, value, timestamp) {
+  if (value < datapoints[datapoint].Value) {
+    // current value is less than former value, which indicates
+    // overflow or reset (e. g. battery exchange)
+    storeOffset(
+      datapoint,
+      utils.round(datapoints[datapoint].Value, offsets[datapoint].decimals),
+      timestamp
+    );
+    return true;
   }
-  return [value, unadjustedValue]
+  return false;
+}
+
+function storeOffset(datapoint, offset, timestamp) {
+  try {
+    if (offsets[datapoint] && offsets[datapoint].events) {
+      offsets[datapoint].events.push(
+        {
+          "comment": "automatically captured overflow or reset",
+          "date": timestamp.toISOString(),
+          "value": offset
+        }
+      );
+      writeOffsetsFile();
+    }
+  }
+  catch(err) {
+    log.error(`Error adding offset for datapoint ${datapoint}`);
+  }
+}
+
+function writeOffsetsFile() {
+  try {
+    fs.writeFile(offsetsFile, JSON.stringify(offsets, null, 2), (err) => {
+        if (err) throw err;
+        console.log('Data written to file');
+    });
+  }
+  catch(err) {
+    log.error(`Failed to write offsets file. ${err}`);
+  }
 }
 
 function handleEnergyCounterDailyDiff() {
@@ -719,7 +752,7 @@ function updateDatapoint(id, value, timestamp) {
   return status;
 }
 
-function getDatapointId(address, name) {
+function getDatapoint(address, name) {
   let id = dpIndex['BidCos-RF.' + address + '.' + name];
   if (id === undefined) {
     id = dpIndex['HmIP-RF.' + address + '.' + name];
@@ -727,35 +760,75 @@ function getDatapointId(address, name) {
   return id;
 }
 
-function logEvent(event) {
+/* Process an incoming RPC event and forward to Graphite/Carbon,
+ * WebSocket(s) and log file.
+ *
+ * The incoming event is an array which contains
+ *   0: interface id         e. g. "hm_i7_development" (<namespace>_<hostname>_<run mode>)
+ *   1: eq3 datapoint name   e. g. "NEQ0936048:1" (<name>:<index>)
+ *   2: hmsrv datapoint name e. g. "TEMPERATUR"
+ *   3: value                e. g. "21.0"
+ */
+function handleRpcEvent(event) {
   if (!stopping) {
-    var id;
-    var address = event[1];
-    var name = event[2];
-    var value = parseFloat(event[3]);
-    var unadjustedValue = -1;
+    let device
+    let channel
+    let datapoint;
+    let address = event[1];
+    let name = event[2];
+    let value = parseFloat(event[3]);
+
+    let offset = -1;
+    let adjusted = -1;
+
     let timestamp = new Date();
     let status = '';
-    let device, channel;
 
-    id = getDatapointId(address, name);
-    if (id !== undefined) {
+    datapoint = getDatapoint(address, name);
 
-      if (datapoints[id] && datapoints[id].Parent && channels[datapoints[id].Parent]) {
-        channel = channels[datapoints[id].Parent];
+    if (datapoint !== undefined) {
+
+      if (datapoints[datapoint] &&
+          datapoints[datapoint].Parent &&
+          channels[datapoints[datapoint].Parent]) {
+
+        channel = channels[datapoints[datapoint].Parent];
         if (channel && channel.Parent) {
           device = devices[channel.Parent];
         }
       }
 
-      if (offset && offset[id]) {
-        [value, unadjustedValue] = applyOffset(id, value);
+      if (offsets && offsets[datapoint]) {
+        if (checkOverflowOrReset(datapoint, value, timestamp)) {
+          log.info(
+            `HMSRV: overflow detected for` +
+            `${datapoint}, ` +
+            `${address}, ` +
+            `${name}: ` +
+            `previous/current: ` +
+            `${datapoints[datapoint].Value}` +
+            `/` +
+            `${value}`
+          );
+        }
+        offset = getTotalOffset(datapoint);
+        adjusted = utils.round(value + offset, offsets[datapoint].decimals);
       }
 
-      status = updateDatapoint(id, value, timestamp);
+      status = updateDatapoint(datapoint, value, timestamp);
 
-      // console
-      log.verbose('HMSRV: ' + status + ' - ' + id + ', ' + address + ', ' + name + ', ' + value);
+      log.verbose(
+        `HMSRV: ` +
+        `${status}` +
+        ` - ` +
+        `${datapoint}, ` +
+        `${address}, ` +
+        `${name}` +
+        ` - ` +
+        `value: ${value}` +
+        `${offset   >- 1? ', offset: '   + offset   : ''}` +
+        `${adjusted > -1? ', adjusted: ' + adjusted : ''}`
+      );
 
       // websocket
       var update = {
@@ -764,41 +837,45 @@ function logEvent(event) {
         status: status[0],
         nameh: device? device.Name : undefined,
         name: name,
-        id: id,
+        datapoint: datapoint,
         address: address,
         value: value
       };
-      if (unadjustedValue !== -1) {
-        update.unadjustedValue = unadjustedValue;
+      if (adjusted !== -1) {
+        update.adjusted = adjusted;
       }
       pushToWebSockets('update', update);
 
       // graphite
-      if (persistence[id] && persistence[id].graphite) {
+      if (persistence[datapoint] && persistence[datapoint].graphite) {
       // convert non numeric values if necessary/possible
         if (isNaN(value)) {
           if (typeof event[3] === 'boolean') {
             value = (event[3] === true)? 1 : 0;
           }
           else {
-            log.warn(`Value "${value}" for datapoint ${id} - ${datapoints[id].Name} is not numeric`);
+            log.warn(
+              `Value "${value}" `
+              `for datapoint ${datapoint} - ${datapoints[datapoint].Name} `
+              `is not numeric`
+            );
           }
         }
         graphiteCacheValuesFull.push({
-          path: persistence[id].graphite.path,
-          value: value,
+          path: persistence[datapoint].graphite.path,
+          value: adjusted !== -1? adjusted : value,
           timestamp: timestamp.getTime()
         });
       }
     }
     else {
-      log.verbose('HMSRV: <unknown> ' + address + ', ' + name + ', ' + value);
+      log.verbose(`HMSRV: <unknown> ${address}, ${name}, ${value}`);
     }
     if (name === 'LOWBAT') {
-      handleLowBat(id, event[3]);
+      handleLowBat(datapoint, event[3]);
     }
   }
-} // logEvent()
+} // handleRpcEvent()
 
 /******************************************************************************
  *

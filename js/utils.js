@@ -75,4 +75,7 @@ exports.getHumanReadableDateTime = function(time) {
          fill( d.getMinutes()   .toString(), 2) + ':' +
          fill( d.getSeconds()   .toString(), 2);
 };
-
+exports.round = function(value, decimals) {
+  let decimalsFactor = Math.pow(10, decimals);
+  return Math.round(value * decimalsFactor) / decimalsFactor;
+}

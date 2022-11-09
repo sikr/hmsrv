@@ -43,6 +43,7 @@ var storeFile   = '../data/store.json';
 var options     = null;
 var CronJob     = require('cron').CronJob;
 var storeJob    = null;
+var flushJob    = null;
 // var assert      = require('assert');
 var os          = require('os');
 
@@ -894,6 +895,7 @@ function setupCron() {
     },
     start: true
   });
+
   flushJob = new CronJob({
     cronTime: '0 * * * * 0-6',
     onTick:  async function () {
@@ -902,7 +904,7 @@ function setupCron() {
       // countValuesFull = 0;
     },
     start: true
-  });
+  })
 } // setupCron()
 
 function stopCron() {
@@ -1066,5 +1068,10 @@ async function main() {
   log.time(startTime, 'HMSRV: *** Startup finished successfully after ');
 }
 
-main();
+try {
+  main();
+}
+catch(err) {
+  console.log(err);
+}
 })();

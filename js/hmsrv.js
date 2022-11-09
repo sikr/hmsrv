@@ -476,7 +476,7 @@ async function setupGraphite() {
     };
     graphite = new Graphite(_options);
 
-    await graphite.connect();
+    graphite.connect();
 
     graphite.on("close", () => {
       log.info("GRAPHITE: connection closed.");
@@ -518,6 +518,7 @@ async function flushGraphite() {
       await graphite.send(graphiteValues);
       log.debug(`GRAPHITE: ${graphiteValues.length} values flushed`);
       stats.graphite.flushing.success++;
+      pushToWebSockets(`update`, `Sent ${graphiteValues.length} measures to Graphite.`);
     }
     catch(err) {
       log.error(`GRAPHITE: flush failed: ${err}`);
@@ -893,6 +894,15 @@ function setupCron() {
     },
     start: true
   });
+  flushJob = new CronJob({
+    cronTime: '0 * * * * 0-6',
+    onTick:  async function () {
+      await flushGraphite();
+      // countValues = 0;
+      // countValuesFull = 0;
+    },
+    start: true
+  });
 } // setupCron()
 
 function stopCron() {
@@ -953,7 +963,7 @@ async function shutdown(params) {
     try {
       await stopRpc();
       await flushGraphite();
-      await stopGraphite();
+      stopGraphite();
       log.info("Gracefully shutdown HMSRV. Bye.");
       process.exit(0);
     }
@@ -1050,10 +1060,6 @@ async function main() {
     dpCount++;
   }
   log.info('HMSRV: Data Point Index successfully built, ' + dpCount.toString() + ' entries.');
-
-  setInterval(function() {
-    flushGraphite();
-  }, nFlushInterval * 1000);
 
   setupCron();
 
